@@ -34,12 +34,12 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                 cls.loop = self._loop
                 cls.get_remote_service = self.get_remote_service
                 wrapped = cls()
-                endpoints = parse_wrapped_endpoints(wrapped)
+                self.endpoints = parse_wrapped_endpoints(wrapped)
                 for version in versions:
-                    for path, methods in endpoints.get('*', {}).items():
+                    for path, methods in self.endpoints.get('*', {}).items():
                         for method, handler in methods.items():
                             self._app.add_route(handler, '/' + version + path, methods=[method])
-                    for path, methods in endpoints.get(version, {}).items():
+                    for path, methods in self.endpoints.get(version, {}).items():
                         for method, handler in methods.items():
                             self._app.add_route(handler, '/' + version + path, methods=[method])
                 self._nc = NATS()
@@ -66,7 +66,6 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
 
             def get_remote_service(self, name, version):
                 return RemoteService(name=name, version=version, loop=self._loop, broker_urls=self._broker_urls)
-
 
         return Api
 

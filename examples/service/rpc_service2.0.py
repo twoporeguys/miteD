@@ -1,7 +1,7 @@
 from miteD.service.service import rpc_service, rpc_method
 
 
-@rpc_service(name='test', versions=['2.0'])
+@rpc_service(name='test', versions=['2.0'], broker_urls=['nats://127.0.0.1:4222'])
 class RpcService:
     @rpc_method(versions=['2.0'])
     def ping(self, *args):

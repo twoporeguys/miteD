@@ -1,9 +1,11 @@
 import asyncio
+import logging
 from contextlib import suppress
 from json import loads, dumps
 from nats.aio.client import Client as NATS
 
 from miteD.service.client import RemoteService
+
 
 def parse_wrapped_endpoints(cls, *args, **kwargs):
     wrapped = cls(*args, **kwargs)
@@ -15,56 +17,26 @@ def parse_wrapped_endpoints(cls, *args, **kwargs):
                     members = endpoints.get(version, {})
                     members[member.__rpc_name__] = member
                     endpoints[version] = members
-    for version in endpoints.keys():
-        print(version, endpoints[version].keys())
     return endpoints
 
 
 def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
     def wrapper(cls):
-        async def listen(loop, endpoints):
-            nc = NATS()
-            await nc.connect(io_loop=loop, servers=broker_urls, verbose=True)
-
-            def get_payload(msg):
-                data = msg.data.decode()
-                return loads(data)
-
-            async def handle_request(msg):
-                try:
-                    subject = msg.subject
-                    api_version = subject.split('.')[1]
-                    api_method = subject.split('.')[2]
-                    reply = msg.reply
-                    data = get_payload(msg)
-                    api = endpoints.get(api_version, endpoints['*'])
-                    method = api.get(api_method, endpoints['*'].get(api_method, None))
-                    if method:
-                        await nc.publish(reply, dumps(method(*data)).encode())
-                    else:
-                        raise NotImplementedError()
-                except Exception as err:
-                    print(err)
-
-            async def expose_api_version(api, api_version):
-                subject = '{}.{}.*'.format(api, api_version.replace('.', '_'))
-                await nc.subscribe(subject, cb=handle_request)
-                print('listening for messages on ' + subject)
-
-            for version in versions:
-                await expose_api_version(name, version)
 
         class Service(object):
+            _name = name
             _loop = asyncio.get_event_loop()
             _broker_urls = broker_urls
+            _nc = NATS()
 
-            def __init__(self, *args, **kwargs):
+            def __init__(self):
+                logging.basicConfig(level=logging.INFO)
                 cls.loop = self._loop
                 cls.get_remote_service = self.get_remote_service
-                self.endpoints = parse_wrapped_endpoints(cls, *args, *kwargs)
+                self.endpoints = parse_wrapped_endpoints(cls)
 
             def start(self):
-                self._loop.run_until_complete(listen(self._loop, self.endpoints))
+                asyncio.ensure_future(self._start())
                 self._loop.run_forever()
                 self._loop.close()
 
@@ -76,10 +48,43 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                         self._loop.run_until_complete(task)
                 self._loop.close()
 
+            async def _start(self):
+                logging.info('[miteD.RPC] Connect %s', self._broker_urls)
+                await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True, name=self._name)
+
+                return await asyncio.wait([self.expose_api_version(name, version) for version in versions])
+
+            async def handle_request(self, msg):
+                try:
+                    subject = msg.subject
+                    api_version = subject.split('.')[1]
+                    api_method = subject.split('.')[2]
+                    reply = msg.reply
+                    data = self.get_payload(msg)
+                    api = self.endpoints.get(api_version, self.endpoints['*'])
+                    method = api.get(api_method, self.endpoints['*'].get(api_method, None))
+                    if method:
+                        await self._nc.publish(reply, dumps(method(*data)).encode())
+                    else:
+                        raise NotImplementedError()
+                except Exception as err:
+                    print(err)
+
+            async def expose_api_version(self, api, api_version):
+                subject = '{}.{}.*'.format(api, api_version.replace('.', '_'))
+                logging.info('listening for messages on ' + subject)
+                await self._nc.subscribe(subject, cb=self.handle_request)
+
             def get_remote_service(self, name, version):
                 return RemoteService(name=name, version=version, loop=self._loop, broker_urls=self._broker_urls)
 
+            @staticmethod
+            def get_payload(msg):
+                data = msg.data.decode()
+                return loads(data)
+
         return Service
+
     return wrapper
 
 
