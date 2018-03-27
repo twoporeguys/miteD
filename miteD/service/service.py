@@ -8,11 +8,12 @@ def parse_wrapped_endpoints(cls, *args, **kwargs):
     wrapped = cls(*args, **kwargs)
     endpoints = {'*': {}}
     for member in [getattr(wrapped, member_name) for member_name in dir(wrapped)]:
-        if hasattr(member, '__rpc_name__') and hasattr(member, '__rpc_versions__'):
-            for version in [version.replace('.', '_') for version in member.__rpc_versions__]:
-                members = endpoints.get(version, {})
-                members[member.__rpc_name__] = member
-                endpoints[version] = members
+        if callable(member):
+            if hasattr(member, '__rpc_name__') and hasattr(member, '__rpc_versions__'):
+                for version in [version.replace('.', '_') for version in member.__rpc_versions__]:
+                    members = endpoints.get(version, {})
+                    members[member.__rpc_name__] = member
+                    endpoints[version] = members
     for version in endpoints.keys():
         print(version, endpoints[version].keys())
     return endpoints
