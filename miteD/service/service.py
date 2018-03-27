@@ -53,23 +53,24 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                 await expose_api_version(name, version)
 
         class Service(object):
-            loop = asyncio.get_event_loop()
+            _loop = asyncio.get_event_loop()
 
             def __init__(self, *args, **kwargs):
+                cls.loop = self._loop
                 self.endpoints = parse_wrapped_endpoints(cls, *args, *kwargs)
 
             def start(self):
-                self.loop.run_until_complete(listen(self.loop, self.endpoints))
-                self.loop.run_forever()
-                self.loop.close()
+                self._loop.run_until_complete(listen(self._loop, self.endpoints))
+                self._loop.run_forever()
+                self._loop.close()
 
             def stop(self):
-                pending = asyncio.Task.all_tasks(self.loop)
+                pending = asyncio.Task.all_tasks(self._loop)
                 for task in pending:
                     task.cancel()
                     with suppress(asyncio.CancelledError):
-                        self.loop.run_until_complete(task)
-                self.loop.close()
+                        self._loop.run_until_complete(task)
+                self._loop.close()
 
         return Service
     return wrapper
