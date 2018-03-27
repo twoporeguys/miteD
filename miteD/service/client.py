@@ -3,10 +3,10 @@ from nats.aio.client import Client as NATS
 
 
 class RemoteService:
-    def __init__(self, name, version, loop, brokers_url=('nats://127.0.0.1:4222',)):
+    def __init__(self, name, version, loop, broker_urls=('nats://127.0.0.1:4222',)):
         self._nc = NATS()
         self._loop = loop
-        self._brokers_url = brokers_url
+        self._brokers_url = broker_urls
         self._name = name
         self._version = version.replace('.', '_')
         self._proxy_cache = {}
@@ -25,4 +25,8 @@ class RemoteService:
 
     async def _connect(self):
         if not self._nc.is_connected and not self._nc.is_connecting and not self._nc.is_reconnecting:
-            await self._nc.connect(io_loop=self._loop, servers=self._brokers_url)
+            print('[miteD.RS] Connect {} {} on {}'.format(self._name,
+                                                                                   self._version,
+                                                                                   self._brokers_url
+                                                                                   ))
+            await self._nc.connect(io_loop=self._loop, servers=self._brokers_url, verbose=True)

@@ -1,13 +1,12 @@
 from miteD.middleware.api import api
 from miteD.middleware.methods import get
 from miteD.middleware.types import json, text
-from miteD.service.client import RemoteService
 
 
 @api(name='my-api', versions=['1.0', '1.1'])
 class MyApi:
     def __init__(self):
-        self.service = RemoteService(name='test', version='1.1', loop=self.loop)
+        self.service = self.get_remote_service(name='test', version='1.1')
 
     @get(path='/')
     @json

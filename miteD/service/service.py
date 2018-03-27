@@ -3,6 +3,7 @@ from contextlib import suppress
 from json import loads, dumps
 from nats.aio.client import Client as NATS
 
+from miteD.service.client import RemoteService
 
 def parse_wrapped_endpoints(cls, *args, **kwargs):
     wrapped = cls(*args, **kwargs)
@@ -23,7 +24,7 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
     def wrapper(cls):
         async def listen(loop, endpoints):
             nc = NATS()
-            await nc.connect(io_loop=loop, servers=broker_urls)
+            await nc.connect(io_loop=loop, servers=broker_urls, verbose=True)
 
             def get_payload(msg):
                 data = msg.data.decode()
@@ -55,9 +56,11 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
 
         class Service(object):
             _loop = asyncio.get_event_loop()
+            _broker_urls = broker_urls
 
             def __init__(self, *args, **kwargs):
                 cls.loop = self._loop
+                cls.get_remote_service = self.get_remote_service
                 self.endpoints = parse_wrapped_endpoints(cls, *args, *kwargs)
 
             def start(self):
@@ -72,6 +75,9 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                     with suppress(asyncio.CancelledError):
                         self._loop.run_until_complete(task)
                 self._loop.close()
+
+            def get_remote_service(self, name, version):
+                return RemoteService(name=name, version=version, loop=self._loop, broker_urls=self._broker_urls)
 
         return Service
     return wrapper

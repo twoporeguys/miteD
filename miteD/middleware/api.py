@@ -4,6 +4,7 @@ from contextlib import suppress
 from nats.aio.client import Client as NATS
 from sanic import Sanic
 
+from miteD.service.client import RemoteService
 
 def parse_wrapped_endpoints(wrapped):
     endpoints = {'*': {}}
@@ -27,9 +28,11 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
         class Api(object):
             _app = Sanic(name=name)
             _loop = asyncio.get_event_loop()
+            _broker_urls = broker_urls
 
             def __init__(self):
                 cls.loop = self._loop
+                cls.get_remote_service = self.get_remote_service
                 wrapped = cls()
                 endpoints = parse_wrapped_endpoints(wrapped)
                 for version in versions:
@@ -43,7 +46,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
 
             async def _connect(self):
                 if not self._nc.is_connected and not self._nc.is_connecting and not self._nc.is_reconnecting:
-                    await self._nc.connect(io_loop=self._loop, servers=broker_urls)
+                    await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True)
 
             def start(self):
                 print('\n'.join(['{} {}'.format(*(list(route.methods)[0], path))
@@ -60,6 +63,10 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                     with suppress(asyncio.CancelledError):
                         self._loop.run_until_complete(task)
                 self._loop.close()
+
+            def get_remote_service(self, name, version):
+                return RemoteService(name=name, version=version, loop=self._loop, broker_urls=self._broker_urls)
+
 
         return Api
 
