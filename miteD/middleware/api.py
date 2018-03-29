@@ -6,6 +6,7 @@ from sanic import Sanic
 
 from miteD.service.client import RemoteService
 
+
 def parse_wrapped_endpoints(wrapped):
     endpoints = {'*': {}}
     for member in [getattr(wrapped, member_name) for member_name in dir(wrapped)]:
@@ -29,6 +30,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
             _app = Sanic(name=name)
             _loop = asyncio.get_event_loop()
             _broker_urls = broker_urls
+            _nc = NATS()
 
             def __init__(self):
                 cls.loop = self._loop
@@ -42,16 +44,15 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                     for path, methods in self.endpoints.get(version, {}).items():
                         for method, handler in methods.items():
                             self._app.add_route(handler, '/' + version + path, methods=[method])
-                self._nc = NATS()
 
             async def _connect(self):
-                if not self._nc.is_connected and not self._nc.is_connecting and not self._nc.is_reconnecting:
-                    await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True)
+                return await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True)
 
             def start(self):
                 print('\n'.join(['{} {}'.format(*(list(route.methods)[0], path))
                                  for path, route in self._app.router.routes_all.items()]))
                 server = self._app.create_server(host='0.0.0.0', port=8000)
+                asyncio.ensure_future(self._connect())
                 asyncio.ensure_future(server)
                 self._loop.run_forever()
                 self._loop.close()
@@ -64,8 +65,8 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                         self._loop.run_until_complete(task)
                 self._loop.close()
 
-            def get_remote_service(self, name, version):
-                return RemoteService(name=name, version=version, loop=self._loop, broker_urls=self._broker_urls)
+            def get_remote_service(self, service_name, version):
+                return RemoteService(name=service_name, version=version, nc=self._nc)
 
         return Api
 
