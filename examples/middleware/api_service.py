@@ -1,4 +1,4 @@
-from miteD.middleware.api import api
+from miteD.middleware.api import api, redirect
 from miteD.middleware.methods import get
 from miteD.middleware.types import json, text
 
@@ -6,7 +6,7 @@ from miteD.middleware.types import json, text
 @api(name='my-api', versions=['1.0', '1.1'])
 class MyApi:
     def __init__(self):
-        self.service = self.get_remote_service(name='test', version='1.1')
+        self.service = self.get_remote_service(service_name='test', version='1.1')
 
     @get(path='/')
     @json
@@ -48,6 +48,10 @@ class MyApi:
     @json
     def ping2(self, request):
         return self.service.ping()
+
+    @get('/redirect/<foo>/<bar>')
+    def redirect(self, request, foo, bar):
+        return redirect('http://www.google.com/search?q=' + foo + '%2B' + bar)
 
 
 test = MyApi()

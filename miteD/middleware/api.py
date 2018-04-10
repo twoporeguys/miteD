@@ -2,7 +2,7 @@ import asyncio
 from contextlib import suppress
 
 from nats.aio.client import Client as NATS
-from sanic import Sanic
+from sanic import Sanic, response
 
 from miteD.service.client import RemoteService
 
@@ -71,3 +71,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
         return Api
 
     return wrapper
+
+
+def redirect(target, status=302, headers=None, content_type='test/html'):
+    return response.redirect(target, status=status, headers=headers, content_type=content_type)
