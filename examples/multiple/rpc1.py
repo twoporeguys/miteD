@@ -13,6 +13,9 @@ class RpcService:
     async def ping(self):
         return self.rpc2.foo()
 
+    @rpc_method()
+    async def empty(self):
+        return []
 
 logging.basicConfig(level=logging.getLevelName(os.getenv('LOG_LEVEL', 'INFO')))
 test = RpcService()

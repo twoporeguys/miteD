@@ -31,6 +31,11 @@ class MyApi:
     def recurse(self, request):
         return self.rpc2.recurse()
 
+    @get('/empty')
+    @json
+    def recurse(self, request):
+        return self.rpc1.empty()
+
 
 logging.basicConfig(level=logging.getLevelName(os.getenv('LOG_LEVEL', 'INFO')))
 test = MyApi()
