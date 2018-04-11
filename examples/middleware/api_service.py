@@ -53,6 +53,16 @@ class MyApi:
     def redirect(self, request, foo, bar):
         return redirect('http://www.google.com/search?q=' + foo + '%2B' + bar)
 
+    @get('/not_found')
+    @json
+    async def not_found(self, request):
+        return '', 404
+
+    @get('/not_found2')
+    @json
+    def not_found2(self, request):
+        return '', 404
+
 
 test = MyApi()
 try:

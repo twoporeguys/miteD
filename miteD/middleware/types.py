@@ -7,11 +7,12 @@ from miteD.service.errors import MiteDRPCError
 
 async def _build_response(result):
     try:
+        result = (await result) if iscoroutine(result) else result
         if isinstance(result, tuple):
-            body = (await result[0]) if iscoroutine(result[0]) else result[0]
+            body = result[0]
             rest = result[1:]
         else:
-            body = (await result) if iscoroutine(result) else result
+            body = result
             rest = ()
         return body, rest
     except MiteDRPCError as err:
