@@ -27,3 +27,7 @@ def not_found(*args):
 
 def internal_server_error(*args):
     return _build_error(HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+def temporary_redirect(location):
+    return _build_response(HTTPStatus.TEMPORARY_REDIRECT, location)
