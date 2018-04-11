@@ -1,6 +1,6 @@
 from distutils.core import setup
 setup(name='miteD',
-      version='1.2.1',
+      version='1.3.0',
       packages=[
           'miteD',
           'miteD.middleware',
