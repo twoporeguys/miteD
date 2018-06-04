@@ -134,7 +134,3 @@ class EvalModel(Model):
     method_of_record_creation = StringType(example="Unicorn")
     conductivity_Sm = FloatType(min_value=0, required=True, example=3.45)
     notes = StringType(required=False, max_length=255, example="DOlor vsdvsfv")
-
-
-e = EvalModel()
-print(e.document_model(render_to_yaml=True))
