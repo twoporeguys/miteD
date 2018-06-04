@@ -1,6 +1,5 @@
 import logging
 from os import getenv
-import json
 import datetime
 import yaml
 import uuid
@@ -8,7 +7,6 @@ import uuid
 from schematics.models import Model
 from schematics.types import (StringType, DateTimeType, IntType, BooleanType,
                               ListType, FloatType, ModelType, DictType)
-
 
 logging.basicConfig(level=logging.getLevelName(getenv("LOG_LEVEL", "INFO")))
 
