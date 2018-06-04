@@ -127,10 +127,3 @@ class Model(Model):
         else:
             return {"ERROR": f"Unable to generate documentation for {field.name}"}
 
-
-class EvalModel(Model):
-    etype = StringType(required=True, choices=("initial", "postconditioning", "final"), example="initial")
-    record_tstamp = DateTimeType(required=False)
-    method_of_record_creation = StringType(example="Unicorn")
-    conductivity_Sm = FloatType(min_value=0, required=True, example=3.45)
-    notes = StringType(required=False, max_length=255, example="DOlor vsdvsfv")
