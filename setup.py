@@ -1,4 +1,7 @@
+import setuptools
+
 from distutils.core import setup
+
 setup(name='miteD',
       version='1.3.2',
       packages=[
