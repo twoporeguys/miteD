@@ -23,4 +23,5 @@ def html(fn):
 
 def file(fn):
     fn.__response_type__ = response.file
+    return fn
 
