@@ -20,3 +20,7 @@ def html(fn):
     fn.__response_type__ = response.html
     return fn
 
+
+def file(fn):
+    fn.__response_type__ = response.file
+
