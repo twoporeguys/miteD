@@ -95,5 +95,5 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
     return wrapper
 
 
-def redirect(target, status=302, headers=None, content_type='test/html'):
+def redirect(target, status=302, headers=None, content_type='text/html'):
     return response.redirect(target, status=status, headers=headers, content_type=content_type)
