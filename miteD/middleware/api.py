@@ -1,4 +1,5 @@
 import asyncio
+import json
 from contextlib import suppress
 
 from nats.aio.client import Client as NATS
@@ -19,6 +20,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
             def __init__(self):
                 cls.loop = self._loop
                 cls.get_remote_service = self.get_remote_service
+                cls.generate_endpoint_docs = self.generate_endpoint_docs
 
             async def _connect(self):
                 return await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True)
@@ -89,6 +91,76 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                     except MiteDRPCError as err:
                         return err.message, (err.status,)
                 return typed_handler
+
+            def generate_endpoint_docs(self):
+                """
+                This method is called by a document generating script and yields swagger style (JSON) API documentation
+                for the non-schema portion of swagger. Information about the schemas is accesed at the service level in the validators
+                library.
+                """
+                open_api_version = {"openapi": "3.0.0"}
+
+                class_doc_string = json.loads(cls.__doc__)
+                info = {"info": {
+                            "title": class_doc_string["title"],
+                            "description": class_doc_string["description"],
+                            "version": class_doc_string["version"],
+                            "contact": {
+                                 "name": class_doc_string["contact"]["name"],
+                                 "email": class_doc_string["contact"]["email"]
+                                        },
+                            }}
+                servers = {"servers":
+                                [
+                                    {
+                                     "url": f"https://x1-stg.twoporeguys.com/api/{name}/{str(versions[0])}/>",
+                                     "description": "Staging middleware endpoints."
+                                    },
+                                    {
+                                      "url": f"https://stg.twoporeguys.com/api/{name}/{str(versions[0])}>/",
+                                      "description": "Production server."
+                                    },
+                                    {
+                                     "url": f"<local-reverse-proxy>/api/{name}/{str(versions[0])}>/",
+                                     "description": "Local server though Minikube."
+                                     }
+                                ]
+                            }
+
+                external_docs = {
+                    "externalDocs": {
+                        "description": "The rendered OpenAPI/Swagger for this api.",
+                        "url": f"devdocs.twoporeguys.com/x1/{name}.html"
+                    }
+                }
+                swagger_dict = {
+                    **open_api_version,
+                    **class_doc_string,
+                    **info,
+                    **servers,
+                    **external_docs,
+                    **{"paths": self._doc_paths()}
+                }
+
+                return swagger_dict
+
+            def _doc_paths(self):
+                """" Helper method for finding endpoint in miteD."""
+                paths = {}
+                wrapped = cls
+                for member in [getattr(wrapped, member_name) for member_name in dir(wrapped)]:
+                    if callable(member):
+                        if hasattr(member, '__api_path__'):
+                            try:
+                                if member.__api_path__ in paths.keys():
+                                    paths[member.__api_path__][member.__api_method__] = json.loads(member.__doc__)
+                                else:
+                                    paths[member.__api_path__] = {member.__api_method__: json.loads(member.__doc__)}
+                            except Exception as e:
+                                print(member.__api_path__)
+                                print(member.__api_method__)
+                                print(e)
+                return paths
 
         return Api
 
