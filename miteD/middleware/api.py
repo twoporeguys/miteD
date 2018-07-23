@@ -1,5 +1,8 @@
 import asyncio
 import json
+import requests
+import uuid
+import os
 from contextlib import suppress
 
 from nats.aio.client import Client as NATS
@@ -32,6 +35,8 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                 server = self._app.create_server(host='0.0.0.0', port=8000)
                 asyncio.ensure_future(self._connect())
                 asyncio.ensure_future(server)
+                self._register_with_consul()
+                self._loop.call_later(5, self._add_TTL_check_to_loop())
                 self._loop.run_forever()
                 self._loop.close()
 
@@ -45,6 +50,48 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
 
             def get_remote_service(self, service_name, version):
                 return RemoteService(name=service_name, version=version, nc=self._nc)
+
+            def _register_with_consul(self):
+                self.consul_id = os.getenv("HOSTNAME")
+                # This is also the pod name
+
+                api_data = {
+                  # "dc1" is the default but there's 'no' way to know this without env variable in the yaml.
+                  "Datacenter": "dc1",
+                  "ID": self.consul_id,
+                  "Address": f"api/{name}/{versions}",
+                  "Service": {
+                    "ID": self.consul_id,
+                    "Service": "chip-api",
+                    "Tags": [
+                      "api",
+                      f"{versions}",
+                      f"{name}"
+                    ]
+                  },
+                  "Check": {
+                      "ID": f"{self.consul_id}-TTLCheck",
+                      "DeregisterCriticalServiceAfter": "10m",
+                      "TTL": "30s",
+                  }
+                }
+
+                requests.put(
+                    "consul:8500/v1/catalog/register",
+                    data=api_data
+                )
+
+            def _deregister_with_consul(self):
+                requests.put(f"consul:8500/agent/service/deregister/{self.consul_id}")
+
+            @asyncio.coroutine
+            def _pass_TTL_check(self):
+                while True:
+                    requests.put(f"consul;:8500//agent/check/pass/{self.consul_id}-TTLCheck")
+                    yield from asyncio.sleep(15)
+
+            def _add_TTL_check_to_loop(self):
+                return asyncio.Task(self._pass_TTL_check())
 
             def _load_app(self):
                 self.endpoints = {'*': {}}
