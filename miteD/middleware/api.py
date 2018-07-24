@@ -47,6 +47,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                     with suppress(asyncio.CancelledError):
                         self._loop.run_until_complete(task)
                 self._loop.close()
+                self._deregister_with_consul()
 
             def get_remote_service(self, service_name, version):
                 return RemoteService(name=service_name, version=version, nc=self._nc)
