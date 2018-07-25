@@ -2,14 +2,34 @@ import asyncio
 import json
 import requests
 import uuid
+import time
 import os
 from contextlib import suppress
+from requests.exceptions import RequestException
 
 from nats.aio.client import Client as NATS
 from sanic import Sanic, response
 
 from miteD.service.errors import MiteDRPCError
 from miteD.service.client import RemoteService
+
+
+TTL_CHECK_IN_INTERVAL = os.getenv("TTL_CHECK_IN_INTERVAL") or 15
+# This is how often a service should pass it's TTL check
+
+TTL_TIMEOUT_INTERVAL = os.getenv("TTL_TIMEOUT_INTERVAL") or "60s"
+# This determines how long the monitoring service waits before classifying a service as degraded
+# in the absence of a passing TTL check.
+
+CONSUL_ADDRESS = os.getenv("CONSUL_ADDRESS") or "http://consul:8500"
+# This is routing to the consul cluster, in our case, handled by the consul k8 service.
+
+KEEP_DEGRADED_SERVICE = os.getenv("KEEP_DEGRADED_SERVICE") or "3m"
+# Determines how long consul will keep a degraded service registered.
+
+RETRY_TTL_PASS = os.getenv("RETRY_TTL_PASS") or 3
+# Specifies how many times a service should try to pass TTL checks when
+# receiving errors from http request.
 
 
 def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
@@ -35,8 +55,11 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                 server = self._app.create_server(host='0.0.0.0', port=8000)
                 asyncio.ensure_future(self._connect())
                 asyncio.ensure_future(server)
+
+                asyncio.ensure_future(self._pass_TTL_check())
+
                 self._register_with_consul()
-                self._loop.call_later(5, self._add_TTL_check_to_loop())
+
                 self._loop.run_forever()
                 self._loop.close()
 
@@ -57,42 +80,41 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                 # This is also the pod name
 
                 api_data = {
-                  # "dc1" is the default but there's 'no' way to know this without env variable in the yaml.
-                  "Datacenter": "dc1",
+                  "Name": self.consul_id,
                   "ID": self.consul_id,
-                  "Address": f"api/{name}/{versions}",
+                  "Address": f"api/{name}/{versions[0]}",
+                  "Tags": [
+                      "api",
+                      f"{versions[0]}",
+                      f"{name}"
+                  ],
                   "Service": {
                     "ID": self.consul_id,
-                    "Service": "chip-api",
-                    "Tags": [
-                      "api",
-                      f"{versions}",
-                      f"{name}"
-                    ]
+                    "Service": "chip-api"
                   },
                   "Check": {
-                      "ID": f"{self.consul_id}-TTLCheck",
-                      "DeregisterCriticalServiceAfter": "10m",
-                      "TTL": "30s",
+                      "CheckID": f"{self.consul_id}-TTLCheck",
+                      "DeregisterCriticalServiceAfter": KEEP_DEGRADED_SERVICE,
+                      "TTL": TTL_TIMEOUT_INTERVAL
                   }
                 }
 
-                requests.put(
-                    "consul:8500/v1/catalog/register",
-                    data=api_data
+                r = requests.put(
+                    CONSUL_ADDRESS + "/v1/agent/service/register",
+                    data=json.dumps(api_data)
                 )
 
             def _deregister_with_consul(self):
-                requests.put(f"consul:8500/agent/service/deregister/{self.consul_id}")
+                requests.put(CONSUL_ADDRESS + f"/v1/agent/service/deregister/{self.consul_id}")
 
-            @asyncio.coroutine
-            def _pass_TTL_check(self):
-                while True:
-                    requests.put(f"consul;:8500//agent/check/pass/{self.consul_id}-TTLCheck")
-                    yield from asyncio.sleep(15)
-
-            def _add_TTL_check_to_loop(self):
-                return asyncio.Task(self._pass_TTL_check())
+            async def _pass_TTL_check(self):
+                consul_connection_attempts = RETRY_TTL_PASS
+                while True and consul_connection_attempts:
+                    try:
+                        requests.put(CONSUL_ADDRESS + f"/v1/agent/check/pass/{self.consul_id}-TTLCheck")
+                        await asyncio.sleep(TTL_CHECK_IN_INTERVAL)
+                    except RequestException:
+                        consul_connection_attempts -= 1
 
             def _load_app(self):
                 self.endpoints = {'*': {}}
