@@ -14,20 +14,20 @@ from miteD.service.errors import MiteDRPCError
 from miteD.service.client import RemoteService
 
 
-TTL_CHECK_IN_INTERVAL = os.getenv("TTL_CHECK_IN_INTERVAL") or 15
+TTL_CHECK_IN_INTERVAL = os.getenv("TTL_CHECK_IN_INTERVAL", 15)
 # This is how often a service should pass it's TTL check
 
-TTL_TIMEOUT_INTERVAL = os.getenv("TTL_TIMEOUT_INTERVAL") or "60s"
+TTL_TIMEOUT_INTERVAL = os.getenv("TTL_TIMEOUT_INTERVAL", "60s")
 # This determines how long the monitoring service waits before classifying a service as degraded
 # in the absence of a passing TTL check.
 
-CONSUL_ADDRESS = os.getenv("CONSUL_ADDRESS") or "http://consul:8500"
+CONSUL_ADDRESS = os.getenv("CONSUL_ADDRESS", "http://consul:8500")
 # This is routing to the consul cluster, in our case, handled by the consul k8 service.
 
-KEEP_DEGRADED_SERVICE = os.getenv("KEEP_DEGRADED_SERVICE") or "3m"
+KEEP_DEGRADED_SERVICE = os.getenv("KEEP_DEGRADED_SERVICE", "3m")
 # Determines how long consul will keep a degraded service registered.
 
-RETRY_TTL_PASS = os.getenv("RETRY_TTL_PASS") or 3
+RETRY_TTL_PASS = os.getenv("RETRY_TTL_PASS", 3)
 # Specifies how many times a service should try to pass TTL checks when
 # receiving errors from http request.
 
@@ -85,12 +85,12 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                   "Address": f"api/{name}/{versions[0]}",
                   "Tags": [
                       "api",
-                      f"{versions[0]}",
-                      f"{name}"
+                      str(versions[0]),
+                      name
                   ],
                   "Service": {
                     "ID": self.consul_id,
-                    "Service": "chip-api"
+                    "Service": f"{name}-{versions[0]}"
                   },
                   "Check": {
                       "CheckID": f"{self.consul_id}-TTLCheck",
