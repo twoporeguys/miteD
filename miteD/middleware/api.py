@@ -1,12 +1,35 @@
 import asyncio
 import json
+import requests
+import uuid
+import time
+import os
 from contextlib import suppress
+from requests.exceptions import RequestException
 
 from nats.aio.client import Client as NATS
 from sanic import Sanic, response
 
 from miteD.service.errors import MiteDRPCError
 from miteD.service.client import RemoteService
+
+
+TTL_CHECK_IN_INTERVAL = os.getenv("TTL_CHECK_IN_INTERVAL", 15)
+# This is how often a service should pass it's TTL check
+
+TTL_TIMEOUT_INTERVAL = os.getenv("TTL_TIMEOUT_INTERVAL", "60s")
+# This determines how long the monitoring service waits before classifying a service as degraded
+# in the absence of a passing TTL check.
+
+CONSUL_ADDRESS = os.getenv("CONSUL_ADDRESS", "http://consul:8500")
+# This is routing to the consul cluster, in our case, handled by the consul k8 service.
+
+KEEP_DEGRADED_SERVICE = os.getenv("KEEP_DEGRADED_SERVICE", "3m")
+# Determines how long consul will keep a degraded service registered.
+
+RETRY_TTL_PASS = os.getenv("RETRY_TTL_PASS", 3)
+# Specifies how many times a service should try to pass TTL checks when
+# receiving errors from http request.
 
 
 def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
@@ -32,6 +55,11 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                 server = self._app.create_server(host='0.0.0.0', port=8000)
                 asyncio.ensure_future(self._connect())
                 asyncio.ensure_future(server)
+
+                asyncio.ensure_future(self._pass_TTL_check())
+
+                self._register_with_consul()
+
                 self._loop.run_forever()
                 self._loop.close()
 
@@ -42,9 +70,51 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                     with suppress(asyncio.CancelledError):
                         self._loop.run_until_complete(task)
                 self._loop.close()
+                self._deregister_with_consul()
 
             def get_remote_service(self, service_name, version):
                 return RemoteService(name=service_name, version=version, nc=self._nc)
+
+            def _register_with_consul(self):
+                self.consul_id = os.getenv("HOSTNAME")
+                # This is also the pod name
+
+                api_data = {
+                  "Name": self.consul_id,
+                  "ID": self.consul_id,
+                  "Address": f"api/{name}/{versions[0]}",
+                  "Tags": [
+                      "api",
+                      str(versions[0]),
+                      name
+                  ],
+                  "Service": {
+                    "ID": self.consul_id,
+                    "Service": f"{name}-{versions[0]}"
+                  },
+                  "Check": {
+                      "CheckID": f"{self.consul_id}-TTLCheck",
+                      "DeregisterCriticalServiceAfter": KEEP_DEGRADED_SERVICE,
+                      "TTL": TTL_TIMEOUT_INTERVAL
+                  }
+                }
+
+                r = requests.put(
+                    CONSUL_ADDRESS + "/v1/agent/service/register",
+                    data=json.dumps(api_data)
+                )
+
+            def _deregister_with_consul(self):
+                requests.put(CONSUL_ADDRESS + f"/v1/agent/service/deregister/{self.consul_id}")
+
+            async def _pass_TTL_check(self):
+                consul_connection_attempts = RETRY_TTL_PASS
+                while True and consul_connection_attempts:
+                    try:
+                        requests.put(CONSUL_ADDRESS + f"/v1/agent/check/pass/{self.consul_id}-TTLCheck")
+                        await asyncio.sleep(TTL_CHECK_IN_INTERVAL)
+                    except RequestException:
+                        consul_connection_attempts -= 1
 
             def _load_app(self):
                 self.endpoints = {'*': {}}
