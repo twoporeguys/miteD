@@ -6,20 +6,21 @@ from json import loads, dumps, JSONDecodeError
 from nats.aio.client import Client as NATS
 
 from miteD.service.client import RemoteService
-from miteD.service.utils import format_version_str
+from miteD.service.utils import get_members_if, format_version_str
 import miteD.service.response as response
 
 
-def parse_wrapped_endpoints(cls, *args, **kwargs):
-    wrapped = cls(*args, **kwargs)
+def is_rpc_method(method):
+    return getattr(method, '__rpc_method__', False)
+
+
+def parse_wrapped_endpoints(cls):
+    wrapped = cls()
     endpoints = {'*': {}}
-    for member in [getattr(wrapped, member_name) for member_name in dir(wrapped)]:
-        if callable(member):
-            if hasattr(member, '__rpc_name__') and hasattr(member, '__rpc_versions__'):
-                for version in member.__rpc_versions__:
-                    members = endpoints.get(version, {})
-                    members[member.__rpc_name__] = member
-                    endpoints[version] = members
+    for member in get_members_if(is_rpc_method, wrapped):
+        for version in member.__rpc_versions__:
+            members = endpoints.setdefault(version, {})
+            members[member.__rpc_name__] = member
     return endpoints
 
 
@@ -114,8 +115,9 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
     return wrapper
 
 
-def rpc_method(name=None, versions=None):
+def rpc_method(name='', versions=None):
     def wrapper(fn):
+        fn.__rpc_method__ = True
         fn.__rpc_name__ = name or fn.__name__
         fn.__rpc_versions__ = (format_version_str(v) for v in versions) if versions else ('*', )
         return fn
