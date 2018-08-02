@@ -69,8 +69,8 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
 
             def _get_handler(self, msg):
                 subject = msg.subject
-                api_version = subject.split('.')[1]
-                api_method = subject.split('.')[2]
+                api_version = subject.split('.')[3]
+                api_method = subject.split('.')[4]
                 api = self.endpoints.get(api_version, self.endpoints['*'])
                 method = api.get(api_method, self.endpoints['*'].get(api_method, None))
                 if method:
@@ -79,8 +79,8 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                     raise NotImplementedError(subject)
 
             async def _expose_api_version(self, api, api_version):
-                subject = '{}.{}.*'.format(api, api_version)
-                self._logger.info('listening for messages on ' + subject)
+                subject = '{}.{}.{}.{}.*'.format('rpc', 'service', api, api_version)
+                self._logger.info('listening for RPC calls on ' + subject)
                 await self._nc.subscribe(subject, cb=self.handle_message)
 
             async def _handle_request(self, request):
