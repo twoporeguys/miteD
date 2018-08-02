@@ -192,7 +192,7 @@ def notification_handler(layer='*', name='*', versions=None, topic='*'):
         @wraps(fn)
         async def translate(self, msg):
             subject = msg.subject
-            data = msg.data.decode()
+            data = loads(msg.data.decode())
             if asyncio.iscoroutinefunction(fn):
                 return await fn(self, subject, data)
             else:
