@@ -6,6 +6,7 @@ from json import loads, dumps, JSONDecodeError
 from nats.aio.client import Client as NATS
 
 from miteD.service.client import RemoteService
+from miteD.service.utils import format_version_str
 import miteD.service.response as response
 
 
@@ -15,7 +16,7 @@ def parse_wrapped_endpoints(cls, *args, **kwargs):
     for member in [getattr(wrapped, member_name) for member_name in dir(wrapped)]:
         if callable(member):
             if hasattr(member, '__rpc_name__') and hasattr(member, '__rpc_versions__'):
-                for version in [version.replace('.', '_') for version in member.__rpc_versions__]:
+                for version in member.__rpc_versions__:
                     members = endpoints.get(version, {})
                     members[member.__rpc_name__] = member
                     endpoints[version] = members
@@ -30,6 +31,7 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
             _loop = asyncio.get_event_loop()
             _broker_urls = broker_urls
             _nc = NATS()
+            _versions = [format_version_str(v) for v in versions]
 
             def __init__(self):
                 self._logger = logging.getLogger('mited.Service({})'.format(name))
@@ -55,7 +57,7 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
             async def _start(self):
                 self._logger.info('Connecting to %s', self._broker_urls)
                 await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True, name=self._name)
-                return await asyncio.wait([self._expose_api_version(name, version) for version in versions])
+                return await asyncio.wait([self._expose_api_version(name, version) for version in self._versions])
 
             async def handle_message(self, message):
                 asyncio.ensure_future(self._handle_request(message))
@@ -76,7 +78,7 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                     raise NotImplementedError(subject)
 
             async def _expose_api_version(self, api, api_version):
-                subject = '{}.{}.*'.format(api, api_version.replace('.', '_'))
+                subject = '{}.{}.*'.format(api, api_version)
                 self._logger.info('listening for messages on ' + subject)
                 await self._nc.subscribe(subject, cb=self.handle_message)
 
@@ -115,6 +117,6 @@ def rpc_service(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
 def rpc_method(name=None, versions=None):
     def wrapper(fn):
         fn.__rpc_name__ = name or fn.__name__
-        fn.__rpc_versions__ = versions or ['*']
+        fn.__rpc_versions__ = (format_version_str(v) for v in versions) if versions else ('*', )
         return fn
     return wrapper
