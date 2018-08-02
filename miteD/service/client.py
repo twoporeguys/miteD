@@ -1,5 +1,6 @@
 import logging
 from json import loads, dumps
+from nats.aio.errors import ErrTimeout
 
 from miteD.service.errors import MiteDRPCError
 
@@ -29,6 +30,10 @@ class MethodProxy:
             self._logger.debug('<- %s %s', self._method_path, args)
             reply = await self._nc.timed_request(self._method_path, dumps(args).encode(), timeout=3.0)
             return self.__get_result(reply)
+        except ErrTimeout:
+            msg = 'Call timeout for: "{}"'.format(self._method_path)
+            status = 504
+            raise MiteDRPCError({'status': status, 'body': msg})
         except MiteDRPCError as err:
             raise err
 
