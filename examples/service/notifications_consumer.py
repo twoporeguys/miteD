@@ -9,6 +9,13 @@ from miteD.service.service import rpc_service, notification_handler
     broker_urls=['nats://127.0.0.1:4222'],
 )
 class NotificationsConsumer:
+    """
+    To define notifications handler use 'notification_handler' decorator as in examples below.
+    """
+
+    """
+    Listen on channel "notification.service.notifications_producer.1_0.updates"
+    """
     @notification_handler(
         layer='service',
         name='notifications_producer',
@@ -17,7 +24,11 @@ class NotificationsConsumer:
     )
     async def updates_handler(self, channel, msg):
         logging.debug("updates_handler: got notification from channel: {} msg = '{}'".format(channel, msg))
+        raise RuntimeError('dddup')
 
+    """
+    Listen on channel "notification.service.notifications_producer.1_0.errors"
+    """
     @notification_handler(
         layer='service',
         name='notifications_producer',
@@ -27,6 +38,10 @@ class NotificationsConsumer:
     async def errors_handler(self, channel, msg):
         logging.debug("errors_handler: got notification from channel: {} msg = '{}'".format(channel, msg))
 
+    """
+    Wildcard subscription
+    Listen on channel "notification.*.*.*.errors"
+    """
     @notification_handler(
         layer='*',
         name='*',

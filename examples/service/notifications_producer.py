@@ -16,6 +16,18 @@ NATS_URI = 'nats://127.0.0.1:4222'
     notification_topics=['errors', 'updates'],
 )
 class NotificationsProducer:
+    """
+    To enable sending notifications add 'notification_topics' field to 'rpc_service' decorator
+    as above.
+
+    In this example NotificationsProducer will register for publishing to 2 channels:
+      - 'notification.service.notifications_producer.1_0.errors'
+      - 'notification.service.notifications_producer.1_0.updates'
+
+    To send notification from method (does not need to be rpc_method) use:
+        await self.notify.<topic_name>(<contents>)
+    as in examples below
+    """
     @rpc_method()
     async def do_stuff_and_notify(self, *args):
         logging.debug("NotifcationsProducer: Doing stuff...")
