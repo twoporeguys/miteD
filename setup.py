@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='miteD',
-    version='1.5.0',
+    version='1.5.2',
     # packages=[
     #     'miteD',
     #     'miteD.middleware',
@@ -14,15 +14,13 @@ setup(
     description='Api and service infrastructure library for X1 (based on sanic and nats)',
     url='https://github.com/twoporeguys/miteD/',
     keywords='miteD',
-    python_requires='>=3/6',
+    python_requires='>=3.6',
     author='Harry Winters',
     author_email='harry.winters@twoporeguys.com',
     install_requires=[
-        'git+https://github.com/channelcat/sanic.git@b238be54a4d13e37954e025e76472c30029390af'
+        'requests==2.19.1',
+        'sanic==0.7.0',
         'asyncio-nats-streaming==0.1.2',
         'schematics==2.0.1'
-    ],
-    dependency_links=[
-      'http://github.com/user/repo/tarball/master#egg=package-1.0'
     ]
 )
