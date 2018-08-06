@@ -144,7 +144,7 @@ def rpc_service(
                 for version in self._versions:
                     for topic in self._notification_topics:
                         channel = '{}.{}.{}'.format(channel_stem, version, topic)
-                        self._logger.info('Reigstering notifications channel: {}'.format(channel))
+                        self._logger.info('Registering notifications channel: {}'.format(channel))
                         setattr(notify, topic, partial(self._send_notification, channel))
 
                 cls.notify = notify
