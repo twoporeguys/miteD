@@ -4,12 +4,6 @@ from setuptools import setup, find_packages
 setup(
     name='miteD',
     version='1.5.2',
-    # packages=[
-    #     'miteD',
-    #     'miteD.middleware',
-    #     'miteD.service',
-    #     'validators'
-    # ],
     packages=find_packages(exclude=['examples']),
     description='Api and service infrastructure library for X1 (based on sanic and nats)',
     url='https://github.com/twoporeguys/miteD/',
