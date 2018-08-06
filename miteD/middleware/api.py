@@ -25,7 +25,7 @@ CONSUL_ADDRESS = os.getenv("CONSUL_ADDRESS", "http://consul:8500")
 KEEP_DEGRADED_SERVICE = os.getenv("KEEP_DEGRADED_SERVICE", "3m")
 # Determines how long consul will keep a degraded service registered.
 
-RETRY_TTL_PASS = os.getenv("RETRY_TTL_PASS", 3)
+RETRY_TTL_PASS_OR_REGISTRY = os.getenv("RETRY_TTL_PASS_OR_REGISTRY", 3)
 # Specifies how many times a service should try to pass TTL checks
 # OR REGISTER with Consul when receiving errors from http request.
 
@@ -42,7 +42,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
 
             def __init__(self):
                 self.registered_with_consul = False
-                self.consul_connection_attempts = RETRY_TTL_PASS
+                self.consul_connection_attempts = RETRY_TTL_PASS_OR_REGISTRY
                 cls.loop = self._loop
                 cls.get_remote_service = self.get_remote_service
                 cls.generate_endpoint_docs = self.generate_endpoint_docs
@@ -111,9 +111,9 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                     if r.ok:
                         self.registered_with_consul = True
                         # Reset this now that we have registered with consul
-                        # so that we have `RETRY_TTL_PASS` times attempts for
+                        # so that we have `RETRY_TTL_PASS_OR_REGISTRY` times attempts for
                         # purely the TTL ping as well
-                        self.consul_connection_attempts = RETRY_TTL_PASS
+                        self.consul_connection_attempts = RETRY_TTL_PASS_OR_REGISTRY
 
             def _deregister_with_consul(self):
                 requests.put(CONSUL_ADDRESS + f"/v1/agent/service/deregister/{self.consul_id}")
