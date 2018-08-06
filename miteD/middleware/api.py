@@ -1,11 +1,9 @@
 import asyncio
 import json
 import requests
-import uuid
-import time
 import os
+import logging
 from contextlib import suppress
-from requests.exceptions import RequestException
 
 from nats.aio.client import Client as NATS
 from sanic import Sanic, response
@@ -27,9 +25,11 @@ CONSUL_ADDRESS = os.getenv("CONSUL_ADDRESS", "http://consul:8500")
 KEEP_DEGRADED_SERVICE = os.getenv("KEEP_DEGRADED_SERVICE", "3m")
 # Determines how long consul will keep a degraded service registered.
 
-RETRY_TTL_PASS = os.getenv("RETRY_TTL_PASS", 3)
-# Specifies how many times a service should try to pass TTL checks when
-# receiving errors from http request.
+RETRY_TTL_PASS_OR_REGISTRY = os.getenv("RETRY_TTL_PASS_OR_REGISTRY", 3)
+# Specifies how many times a service should try to pass TTL checks
+# OR REGISTER with Consul when receiving errors from http request.
+
+logger = logging.info(__name__)
 
 
 def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
@@ -41,6 +41,8 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
             _nc = NATS()
 
             def __init__(self):
+                self.registered_with_consul = False
+                self.consul_connection_attempts = RETRY_TTL_PASS_OR_REGISTRY
                 cls.loop = self._loop
                 cls.get_remote_service = self.get_remote_service
                 cls.generate_endpoint_docs = self.generate_endpoint_docs
@@ -57,8 +59,6 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                 asyncio.ensure_future(server)
 
                 asyncio.ensure_future(self._pass_TTL_check())
-
-                self._register_with_consul()
 
                 self._loop.run_forever()
                 self._loop.close()
@@ -99,22 +99,35 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                   }
                 }
 
-                r = requests.put(
-                    CONSUL_ADDRESS + "/v1/agent/service/register",
-                    data=json.dumps(api_data)
-                )
+                try:
+                    r = requests.put(
+                        CONSUL_ADDRESS + "/v1/agent/service/register",
+                        data=json.dumps(api_data)
+                    )
+                except requests.exceptions.RequestException:
+                    logger.info('Error whilst trying to register with consul', exc_info=True)
+                    self.consul_connection_attempts -= 1
+                else:
+                    if r.ok:
+                        self.registered_with_consul = True
+                        # Reset this now that we have registered with consul
+                        # so that we have `RETRY_TTL_PASS_OR_REGISTRY` times attempts for
+                        # purely the TTL ping as well
+                        self.consul_connection_attempts = RETRY_TTL_PASS_OR_REGISTRY
 
             def _deregister_with_consul(self):
                 requests.put(CONSUL_ADDRESS + f"/v1/agent/service/deregister/{self.consul_id}")
 
             async def _pass_TTL_check(self):
-                consul_connection_attempts = RETRY_TTL_PASS
-                while True and consul_connection_attempts:
+                while True and self.consul_connection_attempts:
                     try:
-                        requests.put(CONSUL_ADDRESS + f"/v1/agent/check/pass/{self.consul_id}-TTLCheck")
+                        if self.registered_with_consul:
+                            requests.put(f"{CONSUL_ADDRESS}/v1/agent/check/pass/{self.consul_id}-TTLCheck")
+                        else:
+                            self._register_with_consul()
                         await asyncio.sleep(TTL_CHECK_IN_INTERVAL)
-                    except RequestException:
-                        consul_connection_attempts -= 1
+                    except requests.exceptions.RequestException:
+                        self.consul_connection_attempts -= 1
 
             def _load_app(self):
                 self.endpoints = {'*': {}}
