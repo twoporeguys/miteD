@@ -138,37 +138,37 @@ def rpc_service(
             def _add_notify(self, cls):
                 if not self._notification_topics:
                     return
-
                 notify = Notify()
+                for topic, channel in self._assemble_producer_notification_channel_names():
+                    self._logger.info('Registering notifications channel: {}'.format(channel))
+                    setattr(notify, topic, partial(self._send_notification, channel))
+                cls.notify = notify
+
+            def _assemble_producer_notification_channel_names(self):
+                channels = []
                 channel_stem = 'notification.{}.{}'.format(self._layer, self._name)
                 for version in self._versions:
                     for topic in self._notification_topics:
-                        channel = '{}.{}.{}'.format(channel_stem, version, topic)
-                        self._logger.info('Registering notifications channel: {}'.format(channel))
-                        setattr(notify, topic, partial(self._send_notification, channel))
+                        channels.append((topic, '{}.{}.{}'.format(channel_stem, version, topic)))
+                return channels
 
-                cls.notify = notify
-
-            @staticmethod
-            def assemble_notification_channel_names(handler):
+            def _assemble_consumer_notification_channel_names(self, handler):
                 layer = handler.__notification_layer__
-                name = handler.__notification_name__
+                producer_name = handler.__notification_name__
                 versions = handler.__notification_versions__
                 topic = handler.__notification_topic__
-
-                return ['notification.{}.{}.{}.{}'.format(layer, name, v, topic) for v in versions]
+                consumer_name = self._name
+                return ['notification.{}.{}.{}.{}.{}'.format(layer, producer_name, v, topic, consumer_name) for v in versions]
 
             async def _start_notification_handlers(self):
                 coros = []
                 for h in self.notification_handlers:
-                    channels = self.assemble_notification_channel_names(h)
+                    channels = self._assemble_consumer_notification_channel_names(h)
                     self._logger.info("Staring notifications handler for channels: {}".format(channels))
                     coros.extend([self._nc.subscribe(c, cb=h) for c in channels])
-
                 await asyncio.gather(*coros)
 
         return Service
-
     return wrapper
 
 
