@@ -39,6 +39,17 @@ class NotificationsProducer:
         logging.debug("NotifcationsProducer: Doing stuff...")
         return "Stuff done"
 
+    @rpc_method()
+    async def do_more_stuff_and_notify(self, *args):
+        logging.debug("NotifcationsProducer: Doing even more stuff...")
+        for i in range(5):
+            await asyncio.sleep(0.5)
+            msg = {'msg': "Stuff {} got updated".format(i)}
+            await self.notify.updates(msg=msg)
+
+        logging.debug("NotifcationsProducer: Even more stuff done...")
+        return "Even more stuff done"
+
 
 async def main(loop):
     await asyncio.sleep(1)
@@ -48,6 +59,7 @@ async def main(loop):
     logging.debug("main: calling remote procedure")
     try:
         print(await remote.do_stuff_and_notify())
+        print(await remote.do_more_stuff_and_notify())
     except MiteDRPCError as err:
         logging.error(err)
 
