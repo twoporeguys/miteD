@@ -24,7 +24,6 @@ class NotificationsConsumer:
     )
     async def updates_handler(self, channel, msg):
         logging.debug("updates_handler: got notification from channel: {} msg = '{}'".format(channel, msg))
-        raise RuntimeError('dddup')
 
     """
     Listen on channel "notification.service.notifications_producer.1_0.errors"
