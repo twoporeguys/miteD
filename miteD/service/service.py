@@ -132,40 +132,50 @@ def rpc_service(
             def _get_payload(msg):
                 return loads(msg.data.decode())
 
-            async def _send_notification(self, channel, msg):
-                await self._nc.publish(channel, dumps(msg).encode())
+            async def _send_notification(self, subject, msg):
+                await self._nc.publish(subject, dumps(msg).encode())
 
             def _add_notify(self, cls):
                 if not self._notification_topics:
                     return
                 notify = Notify()
-                for topic, channel in self._assemble_producer_notification_channel_names():
-                    self._logger.info('Registering notifications channel: {}'.format(channel))
-                    setattr(notify, topic, partial(self._send_notification, channel))
+                for topic, subject in self._get_notification_topic_and_subject_pairs():
+                    self._logger.info('Registering notifications topic/subject: {}/{}'.format(topic, subject))
+                    setattr(notify, topic, partial(self._send_notification, subject))
                 cls.notify = notify
 
-            def _assemble_producer_notification_channel_names(self):
-                channels = []
-                channel_stem = 'notification.{}.{}'.format(self._layer, self._name)
+            def _get_notification_topic_and_subject_pairs(self):
+                res = []
+                subject_stem = 'notification.{}.{}'.format(self._layer, self._name)
                 for version in self._versions:
                     for topic in self._notification_topics:
-                        channels.append((topic, '{}.{}.{}'.format(channel_stem, version, topic)))
-                return channels
+                        res.append((topic, '{}.{}.{}'.format(subject_stem, version, topic)))
+                return res
 
-            def _assemble_consumer_notification_channel_names(self, handler):
-                layer = handler.__notification_layer__
-                producer_name = handler.__notification_name__
-                versions = handler.__notification_versions__
-                topic = handler.__notification_topic__
-                consumer_name = self._name
-                return ['notification.{}.{}.{}.{}.{}'.format(layer, producer_name, v, topic, consumer_name) for v in versions]
+            def _get_notification_subject_and_queue_pairs(self, handler):
+                res = []
+                for version in handler.__notification_versions__:
+                    subject = 'notification.{}.{}.{}.{}'.format(
+                        handler.__notification_layer__,
+                        handler.__notification_producer__,
+                        version,
+                        handler.__notification_topic__,
+                    )
+                    queue = '{}.{}'.format(
+                        subject,
+                        self._name
+                    )
+                    res.append((subject, queue))
+                return res
 
             async def _start_notification_handlers(self):
                 coros = []
                 for h in self.notification_handlers:
-                    channels = self._assemble_consumer_notification_channel_names(h)
-                    self._logger.info("Staring notifications handler for channels: {}".format(channels))
-                    coros.extend([self._nc.subscribe(c, cb=h) for c in channels])
+                    for subject, queue in self._get_notification_subject_and_queue_pairs(h):
+                        self._logger.info("Staring notifications handler for subject/queue: {}/{}".format(
+                            subject, queue
+                        ))
+                        coros.append(self._nc.subscribe(subject, queue=queue, cb=h))
                 await asyncio.gather(*coros)
 
         return Service
@@ -185,7 +195,7 @@ def notification_handler(layer='*', name='*', versions=None, topic='*'):
     def wrapper(fn):
         fn.__notification_handler__ = True
         fn.__notification_layer__ = layer
-        fn.__notification_name__ = name
+        fn.__notification_producer__ = name
         fn.__notification_versions__ = (format_version_str(v) for v in versions) if versions else ('*',)
         fn.__notification_topic__ = topic
 
