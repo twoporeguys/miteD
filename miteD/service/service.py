@@ -172,7 +172,7 @@ def rpc_service(
                 coros = []
                 for h in self.notification_handlers:
                     for subject, queue in self._get_notification_subject_and_queue_pairs(h):
-                        self._logger.info("Staring notifications handler for subject/queue: {}/{}".format(
+                        self._logger.info("Starting notifications handler for subject/queue: {}/{}".format(
                             subject, queue
                         ))
                         coros.append(self._nc.subscribe(subject, queue=queue, cb=h))
