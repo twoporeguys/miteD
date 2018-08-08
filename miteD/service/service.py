@@ -191,11 +191,11 @@ def rpc_method(name='', versions=None):
     return wrapper
 
 
-def notification_handler(layer='*', name='*', versions=None, topic='*'):
+def notification_handler(layer='*', producer='*', versions=None, topic='*'):
     def wrapper(fn):
         fn.__notification_handler__ = True
         fn.__notification_layer__ = layer
-        fn.__notification_producer__ = name
+        fn.__notification_producer__ = producer
         fn.__notification_versions__ = (format_version_str(v) for v in versions) if versions else ('*',)
         fn.__notification_topic__ = topic
 
