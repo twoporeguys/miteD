@@ -140,7 +140,7 @@ def rpc_service(
                     return
                 notify = Notify()
                 for topic, subject in self._get_notification_topic_and_subject_pairs():
-                    self._logger.info('Registering notifications topic/subject: {}/{}'.format(topic, subject))
+                    self._logger.info("Registering notifications topic/subject: '{}'/'{}'".format(topic, subject))
                     setattr(notify, topic, partial(self._send_notification, subject))
                 cls.notify = notify
 
@@ -172,8 +172,8 @@ def rpc_service(
                 coros = []
                 for h in self.notification_handlers:
                     for subject, queue in self._get_notification_subject_and_queue_pairs(h):
-                        self._logger.info("Starting notifications handler for subject/queue: {}/{}".format(
-                            subject, queue
+                        self._logger.info("Starting notifications handler '{}' for subject/queue: '{}'/'{}'".format(
+                            h.__name__, subject, queue
                         ))
                         coros.append(self._nc.subscribe(subject, queue=queue, cb=h))
                 await asyncio.gather(*coros)
