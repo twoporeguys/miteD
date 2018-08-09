@@ -1,6 +1,8 @@
 import logging
 
-from miteD.service.service import rpc_service, notification_handler
+from miteD.service.service import rpc_service
+from miteD import notification_handler
+
 
 """
 When multiple replicas of a service exist each notification should be propagated to single intance only.

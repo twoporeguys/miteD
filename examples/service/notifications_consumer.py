@@ -1,6 +1,7 @@
 import logging
 
-from miteD.service.service import rpc_service, notification_handler
+from miteD.service.service import rpc_service
+from miteD import notification_handler
 
 
 @rpc_service(

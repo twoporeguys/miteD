@@ -1,9 +1,15 @@
+import logging
+
 from miteD.middleware.api import api, redirect
 from miteD.middleware.methods import get
 from miteD.middleware.types import json, text
 
 
-@api(name='my-api', versions=['1.0', '1.1'])
+@api(
+    name='my-api',
+    versions=['1.0', '1.1'],
+    broker_urls=['nats://127.0.0.1:4222']
+)
 class MyApi:
     def __init__(self):
         self.service = self.get_remote_service(service_name='test', version='1.1')
@@ -64,8 +70,11 @@ class MyApi:
         return '', 404
 
 
-test = MyApi()
-try:
-    test.start()
-except KeyboardInterrupt:
-    test.stop()
+if __name__ == '__main__':
+
+    logging.basicConfig(level=logging.DEBUG)
+    test = MyApi()
+    try:
+        test.start()
+    except KeyboardInterrupt:
+        test.stop()
