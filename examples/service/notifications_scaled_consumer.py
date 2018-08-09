@@ -15,12 +15,11 @@ Logs for each instance of NotificationsConsumerTypeA will be distinguished by ob
 )
 class NotificationsConsumerTypeA:
     """
-    Listen on channel "notification.service.notifications_producer.1_0.updates"
+    Listen on channel "notification.service.notifications_producer.updates"
     """
     @notification_handler(
         layer='service',
-        name='notifications_producer',
-        versions=['1.0'],
+        producer='notifications_producer',
         topic='updates',
     )
     async def updates_handler(self, channel, msg):
