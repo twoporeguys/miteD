@@ -1,8 +1,8 @@
 import asyncio
 import logging
+import json
 from datetime import datetime
 from contextlib import suppress
-from json import loads, dumps, JSONDecodeError
 from nats.aio.client import Client as NATS
 from functools import wraps, partial
 
@@ -84,7 +84,7 @@ def rpc_service(
                 asyncio.ensure_future(self._handle_request(message))
 
             def get_remote_service(self, service_name, version):
-                self._logger.debug('remote service: %s %s', service_name, version)
+                self._logger.debug('Remote service: %s %s', service_name, version)
                 return RemoteService(name=service_name, version=version, nc=self._nc)
 
             def _get_handler(self, msg):
@@ -113,13 +113,13 @@ def rpc_service(
                     return await self._send_reply(request, response.ok(result))
                 except NotImplementedError:
                     return await self._send_reply(request, response.not_found())
-                except JSONDecodeError:
+                except json.JSONDecodeError:
                     return await self._send_reply(request, response.bad_request())
                 except RuntimeError:
                     return await self._send_reply(request, response.internal_server_error())
 
             def _send_reply(self, request, reply):
-                body = dumps(reply).encode()
+                body = json.dumps(reply).encode()
                 self._log_access(request, reply['status'], len(body))
                 return self._nc.publish(request.reply, body)
 
@@ -128,10 +128,10 @@ def rpc_service(
 
             @staticmethod
             def _get_payload(msg):
-                return loads(msg.data.decode())
+                return json.loads(msg.data.decode())
 
             async def _send_notification(self, subject, msg):
-                await self._nc.publish(subject, dumps(msg).encode())
+                await self._nc.publish(subject, json.dumps(msg).encode())
 
             def _add_notify(self, cls):
                 if not self._notification_topics:
@@ -194,12 +194,11 @@ def notification_handler(layer='*', producer='*', topic='*'):
         @wraps(fn)
         async def translate(self, msg):
             subject = msg.subject
-            data = loads(msg.data.decode())
+            data = json.loads(msg.data.decode())
             if asyncio.iscoroutinefunction(fn):
                 return await fn(self, subject, data)
             else:
                 return fn(self, subject, data)
 
         return translate
-
     return wrapper
