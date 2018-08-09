@@ -3,11 +3,11 @@ import json
 import requests
 import os
 import logging
-from contextlib import suppress
 
 from nats.aio.client import Client as NATS
 from sanic import Sanic, response
 
+from miteD.mixin.notifications import NotificationsMixin
 from miteD.service.errors import MiteDRPCError
 from miteD.service.client import RemoteService
 
@@ -30,21 +30,33 @@ RETRY_TTL_PASS_OR_REGISTRY = os.getenv("RETRY_TTL_PASS_OR_REGISTRY", 3)
 # OR REGISTER with Consul when receiving errors from http request.
 
 
-def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
+def api(
+        name,
+        versions,
+        broker_urls=('nats://127.0.0.1:4222',),
+        notification_topics=None,
+        host='0.0.0.0',
+        port=8000,
+):
     def wrapper(cls):
 
-        class Api(object):
+        class Api(NotificationsMixin):
+            _layer = 'middleware'
             _loop = asyncio.get_event_loop()
+            _name = name
             _broker_urls = broker_urls
+            _notification_topics = notification_topics or []
             _nc = NATS()
 
             def __init__(self):
-                self._logger = logging.getLogger('mited.Middleware({})'.format(name))
+                self._logger = logging.getLogger('mited.Middleware({})'.format(self._name))
+                self._add_notify(cls)
                 self.registered_with_consul = False
                 self.consul_connection_attempts = RETRY_TTL_PASS_OR_REGISTRY
                 cls.loop = self._loop
                 cls.get_remote_service = self.get_remote_service
                 cls.generate_endpoint_docs = self.generate_endpoint_docs
+                self.notification_handlers = self.get_notification_handlers(cls)
 
             def start(self):
                 self._load_app()
@@ -65,9 +77,10 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
 
             async def _start(self):
                 self._logger.info('Connecting to %s', self._broker_urls)
-                await self._app.create_server(host='0.0.0.0', port=8000)
-                await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True)
+                await self._app.create_server(host=host, port=port)
+                await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True, name=self._name)
                 await self._pass_TTL_check()
+                await self._start_notification_handlers()
 
             def get_remote_service(self, service_name, version):
                 self._logger.debug('Remote service: %s %s', service_name, version)

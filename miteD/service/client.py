@@ -3,7 +3,7 @@ from json import loads, dumps
 from nats.aio.errors import ErrTimeout
 
 from miteD.service.errors import MiteDRPCError
-from miteD.service.utils import format_version_str
+from miteD.utils import format_version_str
 
 
 class RemoteService:
