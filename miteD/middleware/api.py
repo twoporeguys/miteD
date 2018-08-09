@@ -29,8 +29,6 @@ RETRY_TTL_PASS_OR_REGISTRY = os.getenv("RETRY_TTL_PASS_OR_REGISTRY", 3)
 # Specifies how many times a service should try to pass TTL checks
 # OR REGISTER with Consul when receiving errors from http request.
 
-logger = logging.info(__name__)
-
 
 def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
     def wrapper(cls):
@@ -41,6 +39,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
             _nc = NATS()
 
             def __init__(self):
+                self._logger = logging.getLogger('mited.Middleware({})'.format(name))
                 self.registered_with_consul = False
                 self.consul_connection_attempts = RETRY_TTL_PASS_OR_REGISTRY
                 cls.loop = self._loop
@@ -52,7 +51,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
 
             def start(self):
                 self._load_app()
-                print('\n'.join(['{} {}'.format(*(list(route.methods)[0], path))
+                self._logger.info('\n'.join(['{} {}'.format(*(list(route.methods)[0], path))
                                  for path, route in self._app.router.routes_all.items()]))
                 server = self._app.create_server(host='0.0.0.0', port=8000)
                 asyncio.ensure_future(self._connect())
@@ -105,7 +104,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                         data=json.dumps(api_data)
                     )
                 except requests.exceptions.RequestException:
-                    logger.info('Error whilst trying to register with consul', exc_info=True)
+                    self._logger.warning('Error whilst trying to register with consul', exc_info=True)
                     self.consul_connection_attempts -= 1
                 else:
                     if r.ok:
@@ -163,7 +162,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                     result = method(*args, **kwargs)
                     try:
                         result = (await result) if asyncio.iscoroutine(result) else result
-                        print(result)
+                        logging.debug(result)
                         if isinstance(result, tuple):
                             body = result[0]
                             rest = result[1:]
@@ -240,9 +239,8 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                                 else:
                                     paths[member.__api_path__] = {member.__api_method__: json.loads(member.__doc__)}
                             except Exception as e:
-                                print(member.__api_path__)
-                                print(member.__api_method__)
-                                print(e)
+                                msg = 'Api path/method = {}/{}'.format(member.__api_path__, member.__api_method__)
+                                self._logger.exception(msg)
                 return paths
 
         return Api
