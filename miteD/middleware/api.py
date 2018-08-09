@@ -46,32 +46,31 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                 cls.get_remote_service = self.get_remote_service
                 cls.generate_endpoint_docs = self.generate_endpoint_docs
 
-            async def _connect(self):
-                return await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True)
-
             def start(self):
                 self._load_app()
                 self._logger.info('\n'.join(['{} {}'.format(*(list(route.methods)[0], path))
                                  for path, route in self._app.router.routes_all.items()]))
-                server = self._app.create_server(host='0.0.0.0', port=8000)
-                asyncio.ensure_future(self._connect())
-                asyncio.ensure_future(server)
 
-                asyncio.ensure_future(self._pass_TTL_check())
-
+                self._loop.create_task(self._start())
                 self._loop.run_forever()
                 self._loop.close()
 
             def stop(self):
-                pending = asyncio.Task.all_tasks(self._loop)
-                for task in pending:
-                    task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        self._loop.run_until_complete(task)
+                self._logger.info('Stopping...')
+                group = asyncio.gather(*asyncio.Task.all_tasks(), return_exceptions=True)
+                group.cancel()
+                self._loop.run_until_complete(group)
                 self._loop.close()
                 self._deregister_with_consul()
 
+            async def _start(self):
+                self._logger.info('Connecting to %s', self._broker_urls)
+                await self._app.create_server(host='0.0.0.0', port=8000)
+                await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True)
+                await self._pass_TTL_check()
+
             def get_remote_service(self, service_name, version):
+                self._logger.debug('Remote service: %s %s', service_name, version)
                 return RemoteService(name=service_name, version=version, nc=self._nc)
 
             def _register_with_consul(self):
