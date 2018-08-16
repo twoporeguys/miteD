@@ -11,6 +11,9 @@ from miteD.mixin.notifications import NotificationsMixin
 from miteD.service.errors import MiteDRPCError
 from miteD.service.client import RemoteService
 
+from miteD.middleware.methods import is_api_method
+from miteD.utils import get_members_if
+
 
 TTL_CHECK_IN_INTERVAL = os.getenv("TTL_CHECK_IN_INTERVAL", 15)
 # This is how often a service should pass it's TTL check
@@ -154,17 +157,13 @@ def api(
 
             def parse_wrapped_endpoints(self):
                 wrapped = cls()
-                for member in [getattr(wrapped, member_name) for member_name in dir(wrapped)]:
-                    if callable(member):
-                        if hasattr(member, '__api_path__') \
-                                and hasattr(member, '__api_method__') \
-                                and hasattr(member, '__api_versions__'):
-                            for api_version in member.__api_versions__:
-                                version = self.endpoints.get(api_version, {})
-                                path = version.get(member.__api_path__, {})
-                                path[member.__api_method__] = self._type_response(member)
-                                version[member.__api_path__] = path
-                                self.endpoints[api_version] = version
+                for member in get_members_if(is_api_method, wrapped):
+                        for api_version in member.__api_versions__:
+                            version = self.endpoints.get(api_version, {})
+                            path = version.get(member.__api_path__, {})
+                            path[member.__api_method__] = self._type_response(member)
+                            version[member.__api_path__] = path
+                            self.endpoints[api_version] = version
 
             @staticmethod
             def _type_response(method):
