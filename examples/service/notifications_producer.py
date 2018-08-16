@@ -21,8 +21,8 @@ class NotificationsProducer:
     as above.
 
     In this example NotificationsProducer will register for publishing to 2 channels:
-      - 'notification.service.notifications_producer.1_0.errors'
-      - 'notification.service.notifications_producer.1_0.updates'
+      - 'notification.service.notifications_producer.errors'
+      - 'notification.service.notifications_producer.updates'
 
     To send notification from method (does not need to be rpc_method) use:
         await self.notify.<topic_name>(<contents>)

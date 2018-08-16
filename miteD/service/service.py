@@ -69,11 +69,9 @@ def rpc_service(
 
             def stop(self):
                 self._logger.info('Stopping...')
-                pending = asyncio.Task.all_tasks(self._loop)
-                for task in pending:
-                    task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        self._loop.run_until_complete(task)
+                group = asyncio.gather(*asyncio.Task.all_tasks(), return_exceptions=True)
+                group.cancel()
+                self._loop.run_until_complete(group)
                 self._loop.close()
 
             async def _start(self):
@@ -140,42 +138,37 @@ def rpc_service(
                     return
                 notify = Notify()
                 for topic, subject in self._get_notification_topic_and_subject_pairs():
-                    self._logger.info('Registering notifications topic/subject: {}/{}'.format(topic, subject))
+                    self._logger.info("Registering notifications topic/subject: '{}'/'{}'".format(topic, subject))
                     setattr(notify, topic, partial(self._send_notification, subject))
                 cls.notify = notify
 
             def _get_notification_topic_and_subject_pairs(self):
                 res = []
                 subject_stem = 'notification.{}.{}'.format(self._layer, self._name)
-                for version in self._versions:
-                    for topic in self._notification_topics:
-                        res.append((topic, '{}.{}.{}'.format(subject_stem, version, topic)))
+                for topic in self._notification_topics:
+                    res.append((topic, '{}.{}'.format(subject_stem, topic)))
                 return res
 
-            def _get_notification_subject_and_queue_pairs(self, handler):
-                res = []
-                for version in handler.__notification_versions__:
-                    subject = 'notification.{}.{}.{}.{}'.format(
-                        handler.__notification_layer__,
-                        handler.__notification_producer__,
-                        version,
-                        handler.__notification_topic__,
-                    )
-                    queue = '{}.{}'.format(
-                        subject,
-                        self._name
-                    )
-                    res.append((subject, queue))
-                return res
+            def _get_notification_subject_and_queue(self, handler):
+                subject = 'notification.{}.{}.{}'.format(
+                    handler.__notification_layer__,
+                    handler.__notification_producer__,
+                    handler.__notification_topic__,
+                )
+                queue = '{}.{}'.format(
+                    subject,
+                    self._name
+                )
+                return subject, queue
 
             async def _start_notification_handlers(self):
                 coros = []
                 for h in self.notification_handlers:
-                    for subject, queue in self._get_notification_subject_and_queue_pairs(h):
-                        self._logger.info("Starting notifications handler for subject/queue: {}/{}".format(
-                            subject, queue
-                        ))
-                        coros.append(self._nc.subscribe(subject, queue=queue, cb=h))
+                    subject, queue = self._get_notification_subject_and_queue(h)
+                    self._logger.info("Starting notifications handler '{}' for subject/queue: '{}'/'{}'".format(
+                        h.__name__, subject, queue
+                    ))
+                    coros.append(self._nc.subscribe(subject, queue=queue, cb=h))
                 await asyncio.gather(*coros)
 
         return Service
@@ -191,12 +184,11 @@ def rpc_method(name='', versions=None):
     return wrapper
 
 
-def notification_handler(layer='*', name='*', versions=None, topic='*'):
+def notification_handler(layer='*', producer='*', topic='*'):
     def wrapper(fn):
         fn.__notification_handler__ = True
         fn.__notification_layer__ = layer
-        fn.__notification_producer__ = name
-        fn.__notification_versions__ = (format_version_str(v) for v in versions) if versions else ('*',)
+        fn.__notification_producer__ = producer
         fn.__notification_topic__ = topic
 
         @wraps(fn)

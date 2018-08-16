@@ -14,24 +14,22 @@ class NotificationsConsumer:
     """
 
     """
-    Listen on channel "notification.service.notifications_producer.1_0.updates"
+    Listen on channel "notification.service.notifications_producer.updates"
     """
     @notification_handler(
         layer='service',
-        name='notifications_producer',
-        versions=['1.0'],
+        producer='notifications_producer',
         topic='updates',
     )
     async def updates_handler(self, channel, msg):
         logging.debug("updates_handler: got notification from channel: {} msg = '{}'".format(channel, msg))
 
     """
-    Listen on channel "notification.service.notifications_producer.1_0.errors"
+    Listen on channel "notification.service.notifications_producer.errors"
     """
     @notification_handler(
         layer='service',
-        name='notifications_producer',
-        versions=['1.0'],
+        producer='notifications_producer',
         topic='errors',
     )
     async def errors_handler(self, channel, msg):
@@ -39,12 +37,11 @@ class NotificationsConsumer:
 
     """
     Wildcard subscription
-    Listen on channel "notification.*.*.*.errors"
+    Listen on channel "notification.*.*.errors"
     """
     @notification_handler(
         layer='*',
-        name='*',
-        versions=['*'],
+        producer='*',
         topic='updates',
     )
     async def wildcard_handler(self, channel, msg):
