@@ -17,7 +17,6 @@ class MyApi:
     @get(path='/')
     @json
     def root(self, request):
-        print(dir(self))
         return 'ROOT', 200
 
     @get(path='/foo', versions=['1.0'])

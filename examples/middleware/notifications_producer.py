@@ -18,7 +18,6 @@ class MiddlewareProducesNotifications:
     @get(path='/')
     @json
     async def root(self, request):
-        print(dir(self))
         msg = 'Update notification from {}'.format(self.__class__.__name__)
         await self.notify.updates(msg)
         return 'ROOT', 200
