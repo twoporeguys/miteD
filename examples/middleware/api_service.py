@@ -18,42 +18,42 @@ class MyApi:
     @json
     def root(self, request):
         print(dir(self))
-        return 'ROOT'
+        return 'ROOT', 200
 
     @get(path='/foo', versions=['1.0'])
     @json
     def foo(self, request):
-        return 'foo'
+        return 'foo', 200
 
     @get(path='/foo', versions=['1.1'])
     @json
     def foo_1_1(self, request):
-        return 'Foo'
+        return 'Foo', 200
 
     @get(path='/hello/<name>')
     @json
     def hello_name(self, request, name):
-        return 'Hello ' + name
+        return 'Hello ' + name, 200
 
     @get(path='/add/<x:int>/<y:int>', versions=['1.1'])
     @json
     def add(self, request, x, y):
-        return x + y, 201
+        return x + y, 200
 
     @get(path='/sub/<x:int>/<y:int>', versions=['1.2'])
     @json
     def sub(self, request, x, y):
-        return x - y
+        return x - y, 200
 
     @get('/ping')
     @text
     def ping(self, request):
-        return self.service.ping(), 201
+        return self.service.ping(), 200
 
     @get('/ping2')
     @json
     def ping2(self, request):
-        return self.service.ping()
+        return self.service.ping(), 200
 
     @get('/redirect/<foo>/<bar>')
     def redirect(self, request, foo, bar):

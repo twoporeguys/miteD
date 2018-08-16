@@ -21,7 +21,7 @@ class MiddlewareProducesNotifications:
         print(dir(self))
         msg = 'Update notification from {}'.format(self.__class__.__name__)
         await self.notify.updates(msg)
-        return 'ROOT'
+        return 'ROOT', 200
 
 
 def do_request():
