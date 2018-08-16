@@ -6,12 +6,12 @@ from miteD.utils import get_members_if
 
 
 def is_notification_handler(method):
-    return getattr(method, '__notification_handler__', False)
+    return getattr(method, '__is_notification_handler__', False)
 
 
 def notification_handler(layer='*', producer='*', topic='*'):
     def wrapper(fn):
-        fn.__notification_handler__ = True
+        fn.__is_notification_handler__ = True
         fn.__notification_layer__ = layer
         fn.__notification_producer__ = producer
         fn.__notification_topic__ = topic

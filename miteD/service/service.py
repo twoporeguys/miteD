@@ -11,7 +11,7 @@ import miteD.service.response as response
 
 
 def is_rpc_method(method):
-    return getattr(method, '__rpc_method__', False)
+    return getattr(method, '__is_rpc_method__', False)
 
 
 def parse_wrapped_endpoints(cls):
@@ -123,7 +123,7 @@ def rpc_service(
 
 def rpc_method(name='', versions=None):
     def wrapper(fn):
-        fn.__rpc_method__ = True
+        fn.__is_rpc_method__ = True
         fn.__rpc_name__ = name or fn.__name__
         fn.__rpc_versions__ = (format_version_str(v) for v in versions) if versions else ('*', )
         return fn
