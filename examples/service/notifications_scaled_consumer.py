@@ -34,11 +34,11 @@ class NotificationsConsumerTypeA:
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    service = NotificationsConsumerTypeA()
+    test = NotificationsConsumerTypeA()
 
     try:
         logging.info("Starting consumer")
-        service.start()
+        test.start()
     except KeyboardInterrupt:
         logging.info("Stopping consumer")
-        service.stop()
+        test.stop()
