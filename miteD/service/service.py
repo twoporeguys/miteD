@@ -1,22 +1,17 @@
 import asyncio
 import logging
+import json
 from datetime import datetime
-from contextlib import suppress
-from json import loads, dumps, JSONDecodeError
 from nats.aio.client import Client as NATS
-from functools import wraps, partial
 
 from miteD.service.client import RemoteService
-from miteD.service.utils import get_members_if, format_version_str
+from miteD.utils import get_members_if, format_version_str
+from miteD.mixin.notifications import NotificationsMixin
 import miteD.service.response as response
 
 
 def is_rpc_method(method):
-    return getattr(method, '__rpc_method__', False)
-
-
-def is_notification_handler(method):
-    return getattr(method, '__notification_handler__', False)
+    return getattr(method, '__is_rpc_method__', False)
 
 
 def parse_wrapped_endpoints(cls):
@@ -29,11 +24,6 @@ def parse_wrapped_endpoints(cls):
     return endpoints
 
 
-def get_notification_handlers(cls):
-    wrapped = cls()
-    return get_members_if(is_notification_handler, wrapped)
-
-
 def rpc_service(
         name,
         versions,
@@ -41,10 +31,7 @@ def rpc_service(
         notification_topics=None,
 ):
     def wrapper(cls):
-        class Notify():
-            pass
-
-        class Service(object):
+        class Service(NotificationsMixin):
             _layer = 'service'
             _name = name
             _loop = asyncio.get_event_loop()
@@ -54,13 +41,13 @@ def rpc_service(
             _versions = [format_version_str(v) for v in versions]
 
             def __init__(self):
-                self._logger = logging.getLogger('mited.Service({})'.format(name))
+                self._logger = logging.getLogger('mited.Service({})'.format(self._name))
                 self._access_log = logging.getLogger('mited.rpc.access')
                 self._add_notify(cls)
                 cls.loop = self._loop
                 cls.get_remote_service = self.get_remote_service
                 self.endpoints = parse_wrapped_endpoints(cls)
-                self.notification_handlers = get_notification_handlers(cls)
+                self.notification_handlers = self.get_notification_handlers(cls)
 
             def start(self):
                 asyncio.ensure_future(self._start())
@@ -84,7 +71,7 @@ def rpc_service(
                 asyncio.ensure_future(self._handle_request(message))
 
             def get_remote_service(self, service_name, version):
-                self._logger.debug('remote service: %s %s', service_name, version)
+                self._logger.debug('Remote service: %s %s', service_name, version)
                 return RemoteService(name=service_name, version=version, nc=self._nc)
 
             def _get_handler(self, msg):
@@ -113,13 +100,13 @@ def rpc_service(
                     return await self._send_reply(request, response.ok(result))
                 except NotImplementedError:
                     return await self._send_reply(request, response.not_found())
-                except JSONDecodeError:
+                except json.JSONDecodeError:
                     return await self._send_reply(request, response.bad_request())
                 except RuntimeError:
                     return await self._send_reply(request, response.internal_server_error())
 
             def _send_reply(self, request, reply):
-                body = dumps(reply).encode()
+                body = json.dumps(reply).encode()
                 self._log_access(request, reply['status'], len(body))
                 return self._nc.publish(request.reply, body)
 
@@ -128,48 +115,7 @@ def rpc_service(
 
             @staticmethod
             def _get_payload(msg):
-                return loads(msg.data.decode())
-
-            async def _send_notification(self, subject, msg):
-                await self._nc.publish(subject, dumps(msg).encode())
-
-            def _add_notify(self, cls):
-                if not self._notification_topics:
-                    return
-                notify = Notify()
-                for topic, subject in self._get_notification_topic_and_subject_pairs():
-                    self._logger.info("Registering notifications topic/subject: '{}'/'{}'".format(topic, subject))
-                    setattr(notify, topic, partial(self._send_notification, subject))
-                cls.notify = notify
-
-            def _get_notification_topic_and_subject_pairs(self):
-                res = []
-                subject_stem = 'notification.{}.{}'.format(self._layer, self._name)
-                for topic in self._notification_topics:
-                    res.append((topic, '{}.{}'.format(subject_stem, topic)))
-                return res
-
-            def _get_notification_subject_and_queue(self, handler):
-                subject = 'notification.{}.{}.{}'.format(
-                    handler.__notification_layer__,
-                    handler.__notification_producer__,
-                    handler.__notification_topic__,
-                )
-                queue = '{}.{}'.format(
-                    subject,
-                    self._name
-                )
-                return subject, queue
-
-            async def _start_notification_handlers(self):
-                coros = []
-                for h in self.notification_handlers:
-                    subject, queue = self._get_notification_subject_and_queue(h)
-                    self._logger.info("Starting notifications handler '{}' for subject/queue: '{}'/'{}'".format(
-                        h.__name__, subject, queue
-                    ))
-                    coros.append(self._nc.subscribe(subject, queue=queue, cb=h))
-                await asyncio.gather(*coros)
+                return json.loads(msg.data.decode())
 
         return Service
     return wrapper
@@ -177,29 +123,8 @@ def rpc_service(
 
 def rpc_method(name='', versions=None):
     def wrapper(fn):
-        fn.__rpc_method__ = True
+        fn.__is_rpc_method__ = True
         fn.__rpc_name__ = name or fn.__name__
         fn.__rpc_versions__ = (format_version_str(v) for v in versions) if versions else ('*', )
         return fn
-    return wrapper
-
-
-def notification_handler(layer='*', producer='*', topic='*'):
-    def wrapper(fn):
-        fn.__notification_handler__ = True
-        fn.__notification_layer__ = layer
-        fn.__notification_producer__ = producer
-        fn.__notification_topic__ = topic
-
-        @wraps(fn)
-        async def translate(self, msg):
-            subject = msg.subject
-            data = loads(msg.data.decode())
-            if asyncio.iscoroutinefunction(fn):
-                return await fn(self, subject, data)
-            else:
-                return fn(self, subject, data)
-
-        return translate
-
     return wrapper

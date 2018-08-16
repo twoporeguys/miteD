@@ -68,13 +68,13 @@ async def main(loop):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    service = NotificationsProducer()
+    test = NotificationsProducer()
     loop = asyncio.get_event_loop()
     task = loop.create_task(main(loop))
 
     try:
         logging.info("Starting NotificationsProducer")
-        service.start()
+        test.start()
     except KeyboardInterrupt:
         logging.info("Stopping NotificationsProducer")
-        service.stop()
+        test.stop()

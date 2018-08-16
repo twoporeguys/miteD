@@ -3,13 +3,16 @@ import json
 import requests
 import os
 import logging
-from contextlib import suppress
 
 from nats.aio.client import Client as NATS
 from sanic import Sanic, response
 
+from miteD.mixin.notifications import NotificationsMixin
 from miteD.service.errors import MiteDRPCError
 from miteD.service.client import RemoteService
+
+from miteD.middleware.methods import is_api_method
+from miteD.utils import get_members_if
 
 
 TTL_CHECK_IN_INTERVAL = os.getenv("TTL_CHECK_IN_INTERVAL", 15)
@@ -29,50 +32,61 @@ RETRY_TTL_PASS_OR_REGISTRY = os.getenv("RETRY_TTL_PASS_OR_REGISTRY", 3)
 # Specifies how many times a service should try to pass TTL checks
 # OR REGISTER with Consul when receiving errors from http request.
 
-logger = logging.info(__name__)
 
-
-def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
+def api(
+        name,
+        versions,
+        broker_urls=('nats://127.0.0.1:4222',),
+        notification_topics=None,
+        host='0.0.0.0',
+        port=8000,
+):
     def wrapper(cls):
 
-        class Api(object):
+        class Api(NotificationsMixin):
+            _layer = 'middleware'
             _loop = asyncio.get_event_loop()
+            _name = name
             _broker_urls = broker_urls
+            _notification_topics = notification_topics or []
             _nc = NATS()
 
             def __init__(self):
+                self._logger = logging.getLogger('mited.Middleware({})'.format(self._name))
+                self._add_notify(cls)
                 self.registered_with_consul = False
                 self.consul_connection_attempts = RETRY_TTL_PASS_OR_REGISTRY
                 cls.loop = self._loop
                 cls.get_remote_service = self.get_remote_service
                 cls.generate_endpoint_docs = self.generate_endpoint_docs
-
-            async def _connect(self):
-                return await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True)
+                self.notification_handlers = self.get_notification_handlers(cls)
 
             def start(self):
                 self._load_app()
-                print('\n'.join(['{} {}'.format(*(list(route.methods)[0], path))
+                self._logger.info('\n'.join(['{} {}'.format(*(list(route.methods)[0], path))
                                  for path, route in self._app.router.routes_all.items()]))
-                server = self._app.create_server(host='0.0.0.0', port=8000)
-                asyncio.ensure_future(self._connect())
-                asyncio.ensure_future(server)
 
-                asyncio.ensure_future(self._pass_TTL_check())
-
+                self._loop.create_task(self._start())
                 self._loop.run_forever()
                 self._loop.close()
 
             def stop(self):
-                pending = asyncio.Task.all_tasks(self._loop)
-                for task in pending:
-                    task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        self._loop.run_until_complete(task)
+                self._logger.info('Stopping...')
+                group = asyncio.gather(*asyncio.Task.all_tasks(), return_exceptions=True)
+                group.cancel()
+                self._loop.run_until_complete(group)
                 self._loop.close()
                 self._deregister_with_consul()
 
+            async def _start(self):
+                self._logger.info('Connecting to %s', self._broker_urls)
+                await self._app.create_server(host=host, port=port)
+                await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True, name=self._name)
+                await self._pass_TTL_check()
+                await self._start_notification_handlers()
+
             def get_remote_service(self, service_name, version):
+                self._logger.debug('Remote service: %s %s', service_name, version)
                 return RemoteService(name=service_name, version=version, nc=self._nc)
 
             def _register_with_consul(self):
@@ -105,7 +119,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                         data=json.dumps(api_data)
                     )
                 except requests.exceptions.RequestException:
-                    logger.info('Error whilst trying to register with consul', exc_info=True)
+                    self._logger.warning('Error whilst trying to register with consul', exc_info=True)
                     self.consul_connection_attempts -= 1
                 else:
                     if r.ok:
@@ -143,17 +157,13 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
 
             def parse_wrapped_endpoints(self):
                 wrapped = cls()
-                for member in [getattr(wrapped, member_name) for member_name in dir(wrapped)]:
-                    if callable(member):
-                        if hasattr(member, '__api_path__') \
-                                and hasattr(member, '__api_method__') \
-                                and hasattr(member, '__api_versions__'):
-                            for api_version in member.__api_versions__:
-                                version = self.endpoints.get(api_version, {})
-                                path = version.get(member.__api_path__, {})
-                                path[member.__api_method__] = self._type_response(member)
-                                version[member.__api_path__] = path
-                                self.endpoints[api_version] = version
+                for member in get_members_if(is_api_method, wrapped):
+                        for api_version in member.__api_versions__:
+                            version = self.endpoints.get(api_version, {})
+                            path = version.get(member.__api_path__, {})
+                            path[member.__api_method__] = self._type_response(member)
+                            version[member.__api_path__] = path
+                            self.endpoints[api_version] = version
 
             @staticmethod
             def _type_response(method):
@@ -163,7 +173,7 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                     result = method(*args, **kwargs)
                     try:
                         result = (await result) if asyncio.iscoroutine(result) else result
-                        print(result)
+                        logging.debug(result)
                         if isinstance(result, tuple):
                             body = result[0]
                             rest = result[1:]
@@ -240,9 +250,8 @@ def api(name, versions, broker_urls=('nats://127.0.0.1:4222',)):
                                 else:
                                     paths[member.__api_path__] = {member.__api_method__: json.loads(member.__doc__)}
                             except Exception as e:
-                                print(member.__api_path__)
-                                print(member.__api_method__)
-                                print(e)
+                                msg = 'Api path/method = {}/{}'.format(member.__api_path__, member.__api_method__)
+                                self._logger.exception(msg)
                 return paths
 
         return Api

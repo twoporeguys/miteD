@@ -1,6 +1,7 @@
 import logging
 
-from miteD.service.service import rpc_service, notification_handler
+from miteD.service.service import rpc_service
+from miteD import notification_handler
 
 
 @rpc_service(
@@ -50,11 +51,11 @@ class NotificationsConsumer:
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    service = NotificationsConsumer()
+    test = NotificationsConsumer()
 
     try:
         logging.info("Starting NotificationsConsumer")
-        service.start()
+        test.start()
     except KeyboardInterrupt:
         logging.info("Stopping NotificationsConsumer")
-        service.stop()
+        test.stop()

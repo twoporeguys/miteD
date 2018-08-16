@@ -1,6 +1,8 @@
 import logging
 
-from miteD.service.service import rpc_service, notification_handler
+from miteD.service.service import rpc_service
+from miteD import notification_handler
+
 
 """
 When multiple replicas of a service exist each notification should be propagated to single intance only.
@@ -32,11 +34,11 @@ class NotificationsConsumerTypeA:
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    service = NotificationsConsumerTypeA()
+    test = NotificationsConsumerTypeA()
 
     try:
         logging.info("Starting consumer")
-        service.start()
+        test.start()
     except KeyboardInterrupt:
         logging.info("Stopping consumer")
-        service.stop()
+        test.stop()

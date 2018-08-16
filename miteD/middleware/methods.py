@@ -1,4 +1,9 @@
+def is_api_method(method):
+    return getattr(method, '__is_api_method__', False)
+
+
 def _add_route(fn, method, path, name, versions):
+    fn.__is_api_method__ = True
     fn.__api_path__ = path
     fn.__api_method__ = method
     fn.__api_name__ = name or path
