@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='miteD',
-    version='2.0.0',
+    version='2.1.0',
     packages=find_packages(exclude=['examples']),
     description='Api and service infrastructure library for X1 (based on sanic and nats)',
     url='https://github.com/twoporeguys/miteD/',
