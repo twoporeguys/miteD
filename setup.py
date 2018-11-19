@@ -12,9 +12,9 @@ setup(
     author='Harry Winters',
     author_email='harry.winters@twoporeguys.com',
     install_requires=[
-        'requests==2.19.1',
-        'sanic==0.7.0',
+        'requests==2.20.1',
+        'sanic==0.8.3',
         'asyncio-nats-streaming==0.1.2',
-        'schematics==2.0.1'
+        'schematics==2.1.0'
     ]
 )
