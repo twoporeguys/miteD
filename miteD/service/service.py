@@ -4,10 +4,10 @@ import json
 from datetime import datetime
 from nats.aio.client import Client as NATS
 
-from miteD.service.client import RemoteService
-from miteD.utils import get_members_if, format_version_str
-from miteD.mixin.notifications import NotificationsMixin
-import miteD.service.response as response
+from .client import RemoteService
+from ..utils import get_members_if, format_version_str, CustomJsonEncoder
+from ..mixin.notifications import NotificationsMixin
+from . import response
 
 
 def is_rpc_method(method):
@@ -106,7 +106,7 @@ def rpc_service(
                     return await self._send_reply(request, response.internal_server_error())
 
             def _send_reply(self, request, reply):
-                body = json.dumps(reply).encode()
+                body = json.dumps(reply, cls=CustomJsonEncoder).encode()
                 self._log_access(request, reply['status'], len(body))
                 return self._nc.publish(request.reply, body)
 
