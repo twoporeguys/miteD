@@ -7,12 +7,12 @@ import logging
 from nats.aio.client import Client as NATS
 from sanic import Sanic, response
 
-from miteD.mixin.notifications import NotificationsMixin
-from miteD.service.errors import MiteDRPCError
-from miteD.service.client import RemoteService
+from ..mixin.notifications import NotificationsMixin
+from ..service.errors import MiteDRPCError
+from ..service.client import RemoteService
 
-from miteD.middleware.methods import is_api_method
-from miteD.utils import get_members_if
+from .methods import is_api_method
+from ..utils import get_members_if
 
 
 TTL_CHECK_IN_INTERVAL = os.getenv("TTL_CHECK_IN_INTERVAL", 15)

@@ -2,7 +2,7 @@ import asyncio
 import json
 from functools import wraps, partial
 
-from miteD.utils import get_members_if
+from ..utils import get_members_if
 
 
 def is_notification_handler(method):
