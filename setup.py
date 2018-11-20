@@ -14,7 +14,6 @@ setup(
     install_requires=[
         'requests==2.20.1',
         'sanic==0.8.3',
-        'asyncio-nats-streaming==0.1.2',
-        'schematics==2.1.0'
+        'asyncio-nats-streaming==0.1.2'
     ]
 )
