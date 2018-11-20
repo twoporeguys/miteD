@@ -2,8 +2,8 @@ import logging
 from json import loads, dumps
 from nats.aio.errors import ErrTimeout
 
-from miteD.service.errors import MiteDRPCError
-from miteD.utils import format_version_str
+from .errors import MiteDRPCError
+from ..utils import format_version_str
 
 
 class RemoteService:
