@@ -4,3 +4,6 @@ build2push: clean
 
 clean:
 	rm -rf ${CURDIR}/build ${CURDIR}/dist ${CURDIR}/*.egg-info
+
+test:
+	python -m unittest discover -p "*_test.py"
