@@ -19,5 +19,5 @@ class CustomJsonEncoder(json.JSONEncoder):
     """
     def default(self, obj):
         if isinstance(obj, datetime.datetime):
-            return obj.astimezone().isoformat()
+            return obj.astimezone(datetime.timezone.utc).isoformat()
         return super(CustomJsonEncoder, self).default(obj)
