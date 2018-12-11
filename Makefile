@@ -1,3 +1,5 @@
+.PHONY: build2push clean deps test
+
 build2push: clean
 	(python3.6 setup.py bdist_wheel)
 	twine upload -r local dist/*
@@ -5,5 +7,11 @@ build2push: clean
 clean:
 	rm -rf ${CURDIR}/build ${CURDIR}/dist ${CURDIR}/*.egg-info
 
-test:
-	python -m unittest discover -p "*_test.py"
+venv:
+	virtualenv venv
+
+deps: venv
+	./venv/bin/pip install -r requirements.txt
+
+test: deps
+	./venv/bin/python -m unittest discover -p "*_test.py"

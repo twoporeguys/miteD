@@ -9,6 +9,8 @@ from ..utils import get_members_if, format_version_str, CustomJsonEncoder
 from ..mixin.notifications import NotificationsMixin
 from . import response
 
+from ..exception.inconsistent_version_exception import InconsistentVersionException
+
 
 def is_rpc_method(method):
     return getattr(method, '__is_rpc_method__', False)
@@ -46,7 +48,7 @@ def rpc_service(
                 self._add_notify(cls)
                 cls.loop = self._loop
                 cls.get_remote_service = self.get_remote_service
-                self.endpoints = parse_wrapped_endpoints(cls)
+                self._parse_wrapped_endpoints()
                 self.notification_handlers = self.get_notification_handlers(cls)
 
             def start(self):
@@ -61,18 +63,18 @@ def rpc_service(
                 self._loop.run_until_complete(group)
                 self._loop.close()
 
-            async def _start(self):
-                self._logger.info('Connecting to %s', self._broker_urls)
-                await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True, name=self._name)
-                await self._start_notification_handlers()
-                return await asyncio.wait([self._expose_api_version(name, version) for version in self._versions])
-
             async def handle_message(self, message):
                 asyncio.ensure_future(self._handle_request(message))
 
             def get_remote_service(self, service_name, version):
                 self._logger.debug('Remote service: %s %s', service_name, version)
                 return RemoteService(name=service_name, version=version, nc=self._nc)
+
+            async def _start(self):
+                self._logger.info('Connecting to %s', self._broker_urls)
+                await self._nc.connect(io_loop=self._loop, servers=self._broker_urls, verbose=True, name=self._name)
+                await self._start_notification_handlers()
+                return await asyncio.wait([self._expose_api_version(name, version) for version in self._versions])
 
             def _get_handler(self, msg):
                 subject = msg.subject
@@ -112,6 +114,17 @@ def rpc_service(
 
             def _log_access(self, request, status, length):
                 self._access_log.info('[%s]"%s" %s %s', datetime.utcnow().isoformat(), request.subject, status, length)
+
+            def _parse_wrapped_endpoints(self):
+                wrapped = cls()
+                self.endpoints = {'*': {}}
+                service_versions = versions + ["*"]
+                for member in get_members_if(is_rpc_method, wrapped):
+                    for version in member.__rpc_versions__:
+                        if version not in service_versions:
+                            raise InconsistentVersionException(version, versions)
+                        members = self.endpoints.setdefault(version, {})
+                        members[member.__rpc_name__] = member
 
             @staticmethod
             def _get_payload(msg):

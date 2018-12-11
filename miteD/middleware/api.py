@@ -8,12 +8,14 @@ from nats.aio.client import Client as NATS
 from sanic import Sanic, response
 
 from ..mixin.notifications import NotificationsMixin
+
 from ..service.errors import MiteDRPCError
 from ..service.client import RemoteService
 
 from .methods import is_api_method
-from ..utils import get_members_if
 
+from ..exception.inconsistent_version_exception import InconsistentVersionException
+from ..utils import get_members_if
 
 TTL_CHECK_IN_INTERVAL = os.getenv("TTL_CHECK_IN_INTERVAL", 15)
 # This is how often a service should pass it's TTL check
@@ -29,6 +31,8 @@ KEEP_DEGRADED_SERVICE = os.getenv("KEEP_DEGRADED_SERVICE", "3m")
 # Determines how long consul will keep a degraded service registered.
 
 RETRY_TTL_PASS_OR_REGISTRY = os.getenv("RETRY_TTL_PASS_OR_REGISTRY", 3)
+
+
 # Specifies how many times a service should try to pass TTL checks
 # OR REGISTER with Consul when receiving errors from http request.
 
@@ -50,6 +54,7 @@ def api(
             _broker_urls = broker_urls
             _notification_topics = notification_topics or []
             _nc = NATS()
+            _app = Sanic(name=name)
 
             def __init__(self):
                 self._logger = logging.getLogger('mited.Middleware({})'.format(self._name))
@@ -60,11 +65,13 @@ def api(
                 cls.get_remote_service = self.get_remote_service
                 cls.generate_endpoint_docs = self.generate_endpoint_docs
                 self.notification_handlers = self.get_notification_handlers(cls)
+                self.endpoints = {'*': {}}
+                self.parse_wrapped_endpoints()
+                self._load_app()
 
             def start(self):
-                self._load_app()
                 self._logger.info('\n'.join(['{} {}'.format(*(list(route.methods)[0], path))
-                                 for path, route in self._app.router.routes_all.items()]))
+                                             for path, route in self._app.router.routes_all.items()]))
 
                 self._loop.create_task(self._start())
                 self._loop.run_forever()
@@ -78,6 +85,75 @@ def api(
                 self._loop.close()
                 self._deregister_with_consul()
 
+            def get_remote_service(self, service_name, version):
+                self._logger.debug('Remote service: %s %s', service_name, version)
+                return RemoteService(name=service_name, version=version, nc=self._nc)
+
+            def parse_wrapped_endpoints(self):
+                wrapped = cls()
+                api_versions = versions + ["*"]
+                for member in get_members_if(is_api_method, wrapped):
+                    for handler_version in member.__api_versions__:
+                        if handler_version not in api_versions:
+                            raise InconsistentVersionException(handler_version, versions)
+                        version = self.endpoints.get(handler_version, {})
+                        path = version.get(member.__api_path__, {})
+                        path[member.__api_method__] = self._type_response(member)
+                        version[member.__api_path__] = path
+                        self.endpoints[handler_version] = version
+
+            def generate_endpoint_docs(self):
+                """
+                This method is called by a document generating script and yields swagger style (JSON) API documentation
+                for the non-schema portion of swagger. Information about the schemas is accesed at the service level in the validators
+                library.
+                """
+                open_api_version = {"openapi": "3.0.0"}
+
+                class_doc_string = json.loads(cls.__doc__)
+                info = {"info": {
+                    "title": class_doc_string["title"],
+                    "description": class_doc_string["description"],
+                    "version": class_doc_string["version"],
+                    "contact": {
+                        "name": class_doc_string["contact"]["name"],
+                        "email": class_doc_string["contact"]["email"]
+                    },
+                }}
+                servers = {"servers":
+                    [
+                        {
+                            "url": f"https://x1-stg.twoporeguys.com/api/{name}/{str(versions[0])}/>",
+                            "description": "Staging middleware endpoints."
+                        },
+                        {
+                            "url": f"https://stg.twoporeguys.com/api/{name}/{str(versions[0])}>/",
+                            "description": "Production server."
+                        },
+                        {
+                            "url": f"<local-reverse-proxy>/api/{name}/{str(versions[0])}>/",
+                            "description": "Local server though Minikube."
+                        }
+                    ]
+                }
+
+                external_docs = {
+                    "externalDocs": {
+                        "description": "The rendered OpenAPI/Swagger for this api.",
+                        "url": f"devdocs.twoporeguys.com/x1/{name}.html"
+                    }
+                }
+                swagger_dict = {
+                    **open_api_version,
+                    **class_doc_string,
+                    **info,
+                    **servers,
+                    **external_docs,
+                    **{"paths": self._doc_paths()}
+                }
+
+                return swagger_dict
+
             async def _start(self):
                 self._logger.info('Connecting to %s', self._broker_urls)
                 await self._app.create_server(host=host, port=port)
@@ -85,32 +161,28 @@ def api(
                 await self._pass_TTL_check()
                 await self._start_notification_handlers()
 
-            def get_remote_service(self, service_name, version):
-                self._logger.debug('Remote service: %s %s', service_name, version)
-                return RemoteService(name=service_name, version=version, nc=self._nc)
-
             def _register_with_consul(self):
                 self.consul_id = os.getenv("HOSTNAME")
                 # This is also the pod name
 
                 api_data = {
-                  "Name": self.consul_id,
-                  "ID": self.consul_id,
-                  "Address": f"api/{name}/{versions[0]}",
-                  "Tags": [
-                      "api",
-                      str(versions[0]),
-                      name
-                  ],
-                  "Service": {
+                    "Name": self.consul_id,
                     "ID": self.consul_id,
-                    "Service": f"{name}-{versions[0]}"
-                  },
-                  "Check": {
-                      "CheckID": f"{self.consul_id}-TTLCheck",
-                      "DeregisterCriticalServiceAfter": KEEP_DEGRADED_SERVICE,
-                      "TTL": TTL_TIMEOUT_INTERVAL
-                  }
+                    "Address": f"api/{name}/{versions[0]}",
+                    "Tags": [
+                        "api",
+                        str(versions[0]),
+                        name
+                    ],
+                    "Service": {
+                        "ID": self.consul_id,
+                        "Service": f"{name}-{versions[0]}"
+                    },
+                    "Check": {
+                        "CheckID": f"{self.consul_id}-TTLCheck",
+                        "DeregisterCriticalServiceAfter": KEEP_DEGRADED_SERVICE,
+                        "TTL": TTL_TIMEOUT_INTERVAL
+                    }
                 }
 
                 try:
@@ -144,9 +216,6 @@ def api(
                         self.consul_connection_attempts -= 1
 
             def _load_app(self):
-                self.endpoints = {'*': {}}
-                self._app = Sanic(name=name)
-                self.parse_wrapped_endpoints()
                 for version in versions:
                     for path, methods in self.endpoints.get('*', {}).items():
                         for method, handler in methods.items():
@@ -154,16 +223,6 @@ def api(
                     for path, methods in self.endpoints.get(version, {}).items():
                         for method, handler in methods.items():
                             self._app.add_route(handler, '/' + version + path, methods=[method])
-
-            def parse_wrapped_endpoints(self):
-                wrapped = cls()
-                for member in get_members_if(is_api_method, wrapped):
-                        for api_version in member.__api_versions__:
-                            version = self.endpoints.get(api_version, {})
-                            path = version.get(member.__api_path__, {})
-                            path[member.__api_method__] = self._type_response(member)
-                            version[member.__api_path__] = path
-                            self.endpoints[api_version] = version
 
             @staticmethod
             def _type_response(method):
@@ -183,59 +242,8 @@ def api(
                         return response_type(*(body, *rest))
                     except MiteDRPCError as err:
                         return err.message, (err.status,)
+
                 return typed_handler
-
-            def generate_endpoint_docs(self):
-                """
-                This method is called by a document generating script and yields swagger style (JSON) API documentation
-                for the non-schema portion of swagger. Information about the schemas is accesed at the service level in the validators
-                library.
-                """
-                open_api_version = {"openapi": "3.0.0"}
-
-                class_doc_string = json.loads(cls.__doc__)
-                info = {"info": {
-                            "title": class_doc_string["title"],
-                            "description": class_doc_string["description"],
-                            "version": class_doc_string["version"],
-                            "contact": {
-                                 "name": class_doc_string["contact"]["name"],
-                                 "email": class_doc_string["contact"]["email"]
-                                        },
-                            }}
-                servers = {"servers":
-                                [
-                                    {
-                                     "url": f"https://x1-stg.twoporeguys.com/api/{name}/{str(versions[0])}/>",
-                                     "description": "Staging middleware endpoints."
-                                    },
-                                    {
-                                      "url": f"https://stg.twoporeguys.com/api/{name}/{str(versions[0])}>/",
-                                      "description": "Production server."
-                                    },
-                                    {
-                                     "url": f"<local-reverse-proxy>/api/{name}/{str(versions[0])}>/",
-                                     "description": "Local server though Minikube."
-                                     }
-                                ]
-                            }
-
-                external_docs = {
-                    "externalDocs": {
-                        "description": "The rendered OpenAPI/Swagger for this api.",
-                        "url": f"devdocs.twoporeguys.com/x1/{name}.html"
-                    }
-                }
-                swagger_dict = {
-                    **open_api_version,
-                    **class_doc_string,
-                    **info,
-                    **servers,
-                    **external_docs,
-                    **{"paths": self._doc_paths()}
-                }
-
-                return swagger_dict
 
             def _doc_paths(self):
                 """" Helper method for finding endpoint in miteD."""
