@@ -105,4 +105,3 @@ class ApiTest(TestCase):
 
         with self.assertRaises(InconsistentVersionException):
             Foo()
-

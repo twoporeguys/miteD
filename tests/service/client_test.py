@@ -7,6 +7,7 @@ from nats.aio.errors import ErrTimeout
 from miteD.service.client import RemoteService, MethodProxy
 from miteD.service.errors import MiteDRPCError
 
+
 class RemoteServiceTest(TestCase):
     def test_should_return_a_MethodProxy(self):
         service = RemoteService("foo", "1.0", None)

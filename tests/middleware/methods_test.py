@@ -204,4 +204,3 @@ class DELETETest(TestCase):
             pass
 
         self.assertEqual(foo.__api_versions__, ["*"])
-

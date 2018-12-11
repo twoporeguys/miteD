@@ -105,8 +105,8 @@ def api(
             def generate_endpoint_docs(self):
                 """
                 This method is called by a document generating script and yields swagger style (JSON) API documentation
-                for the non-schema portion of swagger. Information about the schemas is accesed at the service level in the validators
-                library.
+                for the non-schema portion of swagger.
+                Information about the schemas is accessed at the service level in the validators library.
                 """
                 open_api_version = {"openapi": "3.0.0"}
 
@@ -120,8 +120,7 @@ def api(
                         "email": class_doc_string["contact"]["email"]
                     },
                 }}
-                servers = {"servers":
-                    [
+                servers = {"servers": [
                         {
                             "url": f"https://x1-stg.twoporeguys.com/api/{name}/{str(versions[0])}/>",
                             "description": "Staging middleware endpoints."
@@ -134,8 +133,7 @@ def api(
                             "url": f"<local-reverse-proxy>/api/{name}/{str(versions[0])}>/",
                             "description": "Local server though Minikube."
                         }
-                    ]
-                }
+                ]}
 
                 external_docs = {
                     "externalDocs": {
