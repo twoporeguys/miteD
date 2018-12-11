@@ -14,4 +14,7 @@ deps: venv
 	./venv/bin/pip install -r requirements.txt
 
 test: deps
-	./venv/bin/python -m unittest discover -p "*_test.py"
+	./venv/bin/coverage run --branch -m unittest discover -p "*_test.py"
+	./venv/bin/coverage xml
+	./venv/bin/coverage report -m
+	./venv/bin/coverage erase
