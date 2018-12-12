@@ -29,6 +29,7 @@ def rpc_service(
         versions,
         broker_urls=('nats://127.0.0.1:4222',),
         notification_topics=None,
+        chunking_size=65536
 ):
     def wrapper(cls):
         class Service(NotificationsMixin):
@@ -37,11 +38,12 @@ def rpc_service(
             _loop = asyncio.get_event_loop()
             _broker_urls = broker_urls
             _notification_topics = notification_topics or []
-            _nc = NATS()
             _versions = [format_version_str(v) for v in versions]
 
-            def __init__(self):
+            def __init__(self, nc=NATS()):
                 self._logger = logging.getLogger('mited.Service({})'.format(self._name))
+                self._nc = nc
+                self.chunking_size = chunking_size
                 self._access_log = logging.getLogger('mited.rpc.access')
                 self._add_notify(cls)
                 cls.loop = self._loop
@@ -97,7 +99,15 @@ def rpc_service(
                     result = await method(*data)
                     if asyncio.iscoroutine(result):
                         result = await result
-                    return await self._send_reply(request, response.ok(result))
+                    serialized_result = json.dumps(result, cls=CustomJsonEncoder)
+                    if len(serialized_result) <= self.chunking_size:
+                        return await self._send_reply(request, response.ok(serialized_result))
+                    else:
+                        while serialized_result:
+                            await self._send_reply(request, response.ok(serialized_result[:self.chunking_size]))
+                            serialized_result = serialized_result[self.chunking_size:]
+                        return await self._send_reply(request, response.ok(''))
+
                 except NotImplementedError:
                     return await self._send_reply(request, response.not_found())
                 except json.JSONDecodeError:

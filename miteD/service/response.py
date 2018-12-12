@@ -1,7 +1,7 @@
 from http import HTTPStatus
 
 
-def _build_response(status, body):
+def _build_response(status, body, id=None):
     return {'status': status, 'body': body}
 
 
@@ -11,7 +11,6 @@ def _build_error(status):
 
 def ok(reply=None):
     return _build_response(HTTPStatus.OK, reply)
-
 
 def bad_request(*args):
     return _build_error(HTTPStatus.BAD_REQUEST)
