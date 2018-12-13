@@ -25,3 +25,7 @@ def file(fn):
     fn.__response_type__ = response.file
     return fn
 
+
+def stream(fn):
+    fn.__response_type__ = response.stream
+    return fn
