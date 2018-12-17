@@ -17,8 +17,7 @@ class CustomJsonEncoder(json.JSONEncoder):
     """
     Our custom json encoder to handle datetime tyes
     """
-    DATE_TIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%f'
     def default(self, obj):
         if isinstance(obj, datetime.datetime):
-            return obj.strftime(self.DATE_TIME_FORMAT)
+            return obj.astimezone(datetime.timezone.utc).isoformat()
         return super(CustomJsonEncoder, self).default(obj)
