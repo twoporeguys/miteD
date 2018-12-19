@@ -1,7 +1,7 @@
 from http import HTTPStatus
 
 
-def _build_response(status, body, id=None):
+def _build_response(status, body):
     return {'status': status, 'body': body}
 
 

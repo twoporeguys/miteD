@@ -21,11 +21,14 @@ class ServiceTest(TestCase):
         loop = asyncio.get_event_loop()
 
         loop.run_until_complete(service.handle_message(FakeMessage('rpc.service.foo.1_0.my_method')))
+        call_list = [
+            themagiccall('foo', json.dumps({"status": 200, "body": json.dumps(TEST_STRING)}).encode()),
+            themagiccall('foo', json.dumps({"status": 200, "body": ""}).encode())
+        ]
+        nats_mock.publish.mock.assert_has_calls(call_list)
 
-        nats_mock.publish.mock.assert_called_with('foo', json.dumps({"status": 200, "body": json.dumps(TEST_STRING)}).encode())
-
-    def test_given_a_large_amount_of_data_when_calling_method_it_should_return_first_chunk_of_data(self):
-        TEST_STRING = "FOO BAR BAR"
+    def test_sending_small_amount_of_data_and_receiving_it_in_chunking_followed_by_large_data_sending_and_receiving_in_chunks(self):
+        TEST_STRING = "FOO BAR BAR" * 65536
         SERIALIZED_TEST_STRING = json.dumps(TEST_STRING)
         nats_mock = NATS()
         nats_mock.publish = async_mock()
@@ -48,6 +51,7 @@ class ServiceTest(TestCase):
             SERIALIZED_TEST_STRING = SERIALIZED_TEST_STRING[chunk_len:]
         call_list.append(themagiccall('foo', json.dumps({"status": 200, "body": ""}).encode()))
         nats_mock.publish.mock.assert_has_calls(call_list)
+
 
 class FakeMessage:
     def __init__(self, subject):

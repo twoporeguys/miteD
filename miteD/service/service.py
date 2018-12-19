@@ -101,12 +101,12 @@ def rpc_service(
                         result = await result
                     serialized_result = json.dumps(result, cls=CustomJsonEncoder)
                     if len(serialized_result) <= self.chunking_size:
-                        return await self._send_reply(request, response.ok(serialized_result))
+                        await self._send_reply(request, response.ok(serialized_result))
                     else:
                         while serialized_result:
                             await self._send_reply(request, response.ok(serialized_result[:self.chunking_size]))
                             serialized_result = serialized_result[self.chunking_size:]
-                        return await self._send_reply(request, response.ok(''))
+                    return await self._send_reply(request, response.ok(''))
 
                 except NotImplementedError:
                     return await self._send_reply(request, response.not_found())
