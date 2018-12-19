@@ -1,0 +1,20 @@
+version: '3'
+services:
+  mited:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    environment:
+      - NATS_URI=nats://nats:4222
+    command: "python3 -m unittest discover -v -s /app/tests -p '*_test.py'"
+    depends_on:
+      - nats
+    hostname: mited_test_box
+  nats:
+    image: nats:1.1.0
+    entrypoint: "/gnatsd -DV"
+    expose:
+      - "4222"
+    ports:
+      - "8222:8222"
+    hostname: nats_server
